@@ -830,14 +830,29 @@
 
   function fastingChartCard() {
     const today = util.todayKey();
-    const pts = []; let cum = 0;
+    // Count only days you actually marked "Fasted" (real adherence), not the
+    // theoretical schedule — otherwise it would project ~16h onto every past day.
+    const fastedHabit = (cfg.habits || []).find(h => isDailyCheck(h) && (h.id === "fasted" || /fast/i.test(h.name)));
+    if (!fastedHabit) {
+      return chartCard("⏱️ Cumulative fasting", "",
+        `<p class="muted" style="margin:0">Add a “Fasted” daily habit (Settings) to track this.</p>`);
+    }
+    const pts = []; let cum = 0, anyFasted = false;
     for (let i = 29; i >= 0; i--) {
-      const eat = fasting.dayEatingSegments(cfg, util.addDays(today, -i)).reduce((s, seg) => s + (seg.endMin - seg.startMin), 0);
-      cum += (1440 - eat) / 60;
+      const k = util.addDays(today, -i);
+      if (tracking.dayHabitDone(k, fastedHabit.id)) {
+        const eat = fasting.dayEatingSegments(cfg, k).reduce((s, seg) => s + (seg.endMin - seg.startMin), 0);
+        cum += (1440 - eat) / 60;
+        anyFasted = true;
+      }
       pts.push({ value: cum });
     }
-    return chartCard("⏱️ Cumulative fasting", `${Math.round(cum)}h over 30 days`,
-      lineChartSvg(pts, { min: 0, area: true }), "Running total of fasting hours (from your schedule)");
+    if (!anyFasted) {
+      return chartCard("⏱️ Cumulative fasting", "0h yet",
+        `<p class="muted" style="margin:0">Mark ✓ Fasted on the days you fast and this builds up.</p>`);
+    }
+    return chartCard("⏱️ Cumulative fasting", `${Math.round(cum)}h in last 30 days`,
+      lineChartSvg(pts, { min: 0, area: true }), "Counts only days you marked ✓ Fasted");
   }
 
   function walkingChartCard() {
