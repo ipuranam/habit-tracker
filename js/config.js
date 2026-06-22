@@ -17,9 +17,13 @@
 window.HT = window.HT || {};
 
 HT.DEFAULT_CONFIG = {
-  version: 3,
+  version: 4,
   weekStartDow: 1, // Monday — resets weekly drinking count & weekly views
   remindersEnabled: false, // in-app reminders while the app is open (see note in Settings)
+
+  // Google Calendar (optional, online-only). clientId comes from your own
+  // Google Cloud OAuth setup; calendar data is fetched browser↔Google directly.
+  google: { clientId: "", calendarId: "primary" },
 
   // Eating windows per weekday. Each day is a list of {start,end} windows
   // (a list so a day could have more than one window later). Anything

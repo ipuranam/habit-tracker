@@ -299,12 +299,77 @@
       + `<div class="card"><h2>This week${openBadge("week")}</h2>${workList("week")}</div>`;
   }
 
+  /* ---------- Google Calendar: today's events (Today screen) ---------- */
+  function eventsCard() {
+    const g = cfg.google || {};
+    if (!g.clientId) return ""; // not set up — configured from Settings
+    const today = util.todayKey();
+    const connected = HT.gcal.isConnected();
+    const cached = HT.gcal.cachedEvents(today);
+    let body;
+    if (!connected && !cached) {
+      body = `<button class="btn btn-accent" data-action="gcal-connect">Connect Google Calendar</button>`;
+    } else {
+      const events = cached || [];
+      body = events.length
+        ? events.map(ev => {
+            const time = ev.allDay ? "All day" : labelTime(new Date(ev.start));
+            return `<div class="evt-row">
+                <span class="evt-time muted">${time}</span>
+                <span class="evt-title">${esc(ev.title)}</span>
+                <button class="iconbtn" data-action="event-to-work" data-title="${esc(ev.title)}" title="Add to Work">＋</button>
+              </div>`;
+          }).join("")
+        : `<p class="muted" style="margin:4px 0 0">No events today.</p>`;
+      if (!connected) body += `<p class="muted" style="font-size:.76rem;margin-bottom:0">Showing saved events · <button class="linkbtn" data-action="gcal-connect">refresh</button></p>`;
+    }
+    return `<div class="card"><h2>📆 Today’s events</h2>${body}</div>`;
+  }
+
+  function googleCalendarEditor() {
+    const g = cfg.google || {};
+    const connected = HT.gcal.isConnected();
+    const status = !g.clientId ? "Not set up. Paste your OAuth Client ID below (steps are in the project README)."
+      : connected ? "Connected." : "Client ID saved — tap Connect to sign in.";
+    return `
+      <div class="card">
+        <h2>Google Calendar</h2>
+        <p class="muted" style="font-size:.84rem;margin-top:0">${status}</p>
+        <label class="muted" style="font-size:.8rem">OAuth Client ID</label>
+        <input style="width:100%;margin-top:4px" name="gcal-clientid" data-action="save-gcal-clientid"
+               placeholder="…apps.googleusercontent.com" value="${esc(g.clientId || "")}" autocomplete="off">
+        <div class="form-line" style="margin-top:10px">
+          <label class="muted" style="font-size:.8rem">Calendar ID</label>
+          <input name="gcal-calid" data-action="save-gcal-calid" value="${esc(g.calendarId || "primary")}" style="width:170px" autocomplete="off">
+        </div>
+        <div class="form-actions" style="margin-top:12px">
+          ${connected ? `<button class="btn" data-action="gcal-disconnect">Disconnect</button>`
+                      : `<button class="btn btn-accent" data-action="gcal-connect">Connect</button>`}
+        </div>
+        <p class="muted" style="font-size:.76rem;margin-bottom:0">Online-only. Your calendar is fetched directly between your browser and Google — it doesn’t pass through any other server.</p>
+      </div>`;
+  }
+
+  function gcalConnect() {
+    HT.gcal.connect()
+      .then(() => { flash("Connected"); gcalRefresh(); render(); })
+      .catch(e => { alert("Couldn’t connect: " + e.message); render(); });
+  }
+  // Fetch today's events in the background, then re-render if it changes the view.
+  function gcalRefresh() {
+    if (!(cfg.google && cfg.google.clientId) || !HT.gcal.isConnected()) return;
+    HT.gcal.fetchEvents(util.todayKey())
+      .then(() => { if (state.tab === "today") render(); })
+      .catch(e => console.warn("[gcal] refresh failed:", e.message));
+  }
+
   /* ============================================================
      Today screen
      ============================================================ */
   function renderToday() {
     const key = util.todayKey();
     return fastingCard() + timelineCard()
+      + eventsCard()
       + dailyCard(key)
       + tasksCard(key, true)
       + workTodayCard()
@@ -343,6 +408,7 @@
           <span><i class="sw eat"></i>Eating</span>
           <span><i class="sw fast"></i>Fasting</span>
           <span><i class="sw anchor"></i>Work</span>
+          ${(cfg.google && cfg.google.clientId) ? '<span><i class="sw evt"></i>Events</span>' : ""}
         </div>
       </div>`;
   }
@@ -374,6 +440,15 @@
       const { s, e } = clip(mid + util.hmToMinutes(a.start) * 60000, mid + util.hmToMinutes(a.end) * 60000);
       if (e > s) html += `<div class="tl-anchor" style="left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(a.name)}"></div>`;
     }));
+
+    // Google Calendar events (timed only) as bands, if connected.
+    if (cfg.google && cfg.google.clientId) {
+      (HT.gcal.cachedEvents(util.todayKey()) || []).forEach(ev => {
+        if (ev.allDay) return;
+        const { s, e } = clip(new Date(ev.start).getTime(), new Date(ev.end).getTime());
+        if (e > s) html += `<div class="tl-evt" style="left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(ev.title)}"></div>`;
+      });
+    }
 
     // Hour ticks every 3 hours within the window.
     const t0 = new Date(winStart); t0.setMinutes(0, 0, 0);
@@ -687,7 +762,7 @@
      ============================================================ */
   function renderSettings() {
     return dailyHabitsEditor() + recurringEditor() + metricsEditor() + scheduleEditor()
-      + drinkingLimitEditor() + remindersEditor() + anchorsEditor() + dataCard();
+      + drinkingLimitEditor() + remindersEditor() + googleCalendarEditor() + anchorsEditor() + dataCard();
   }
 
   function metricsEditor() {
@@ -919,6 +994,10 @@
         break;
       case "reminders-on":  enableReminders(); break;
       case "reminders-off": cfg.remindersEnabled = false; saveCfg(); render(); break;
+
+      case "gcal-connect":    gcalConnect(); break;
+      case "gcal-disconnect": HT.gcal.disconnect(); render(); break;
+      case "event-to-work":   tracking.addWorkTodo("day", el.dataset.title); flash("Added to Work"); render(); break;
     }
   }
 
@@ -950,6 +1029,12 @@
     }
     if (act === "save-metric") {
       tracking.setMetric(el.dataset.key, el.dataset.id, e.target.value); render(); return;
+    }
+    if (act === "save-gcal-clientid") {
+      cfg.google = cfg.google || {}; cfg.google.clientId = e.target.value.trim(); saveCfg(); return;
+    }
+    if (act === "save-gcal-calid") {
+      cfg.google = cfg.google || {}; cfg.google.calendarId = e.target.value.trim() || "primary"; saveCfg(); return;
     }
     if (act === "import-file") {
       const file = e.target.files && e.target.files[0];
@@ -1151,6 +1236,7 @@
     setInterval(updateFastingLive, 1000);
     checkReminders();
     setInterval(checkReminders, 60000); // re-check timed tasks each minute while open
+    gcalRefresh(); // refresh calendar events if already connected this session
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

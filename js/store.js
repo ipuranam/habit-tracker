@@ -75,6 +75,11 @@ HT.store = (function () {
       cfg.version = 3;
       changed = true;
     }
+    if (cfg.version < 4) {
+      if (!cfg.google) cfg.google = { clientId: "", calendarId: "primary" };
+      cfg.version = 4;
+      changed = true;
+    }
     if (changed) write(K_CONFIG, cfg);
     return cfg;
   }

@@ -41,6 +41,32 @@ node server.js
 # then open http://localhost:8765
 ```
 
+## Google Calendar setup (optional)
+
+The calendar integration is **online-only** and uses a pure client-side OAuth flow:
+the app stores only your **public** OAuth Client ID, and events are fetched
+**directly between your browser and Google** (no backend, no third party). One-time
+setup in the [Google Cloud Console](https://console.cloud.google.com):
+
+1. **Create a project** (e.g. "Habit Tracker").
+2. **Enable the API:** APIs & Services → Library → search **Google Calendar API** → Enable.
+3. **OAuth consent screen:** User type **External** → fill in app name + your email →
+   add your own Google account under **Test users** (leave it in *Testing* mode — no
+   Google verification needed for personal use). Add the scope
+   `.../auth/calendar.events.readonly` if prompted.
+4. **Create credentials:** APIs & Services → Credentials → Create Credentials →
+   **OAuth client ID** → Application type **Web application**. Under **Authorized
+   JavaScript origins** add both:
+   - `https://ipuranam.github.io`
+   - `http://localhost:8765` (for local dev)
+
+   Create it and copy the **Client ID** (ends in `.apps.googleusercontent.com`).
+5. **In the app:** Settings → Google Calendar → paste the Client ID → **Connect** →
+   sign in and grant read-only calendar access.
+
+Notes: the access token lasts the browser session (reconnect when it expires);
+events are cached so they still show (stale) offline; scope is read-only.
+
 ## Configuration
 
 Defaults live in [`js/config.js`](js/config.js), but on first run they're copied into

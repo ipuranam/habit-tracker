@@ -5,7 +5,7 @@
    Bump CACHE_VERSION whenever you change files so phones pull the
    new version; the activate step deletes old caches.
    ============================================================ */
-const CACHE_VERSION = "tracker-v8";
+const CACHE_VERSION = "tracker-v9";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -15,6 +15,7 @@ const APP_SHELL = [
   "./js/store.js",
   "./js/fasting.js",
   "./js/tracking.js",
+  "./js/gcal.js",
   "./js/app.js",
   "./manifest.json",
   "./icons/icon-192.png",
