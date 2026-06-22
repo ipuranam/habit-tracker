@@ -5,7 +5,7 @@
    Bump CACHE_VERSION whenever you change files so phones pull the
    new version; the activate step deletes old caches.
    ============================================================ */
-const CACHE_VERSION = "tracker-v9";
+const CACHE_VERSION = "tracker-v10";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -37,19 +37,22 @@ self.addEventListener("activate", event => {
   );
 });
 
+// Network-first for our OWN files: always try the network so updates land
+// immediately when online, and fall back to the cache only when offline.
+// Cross-origin requests (Google sign-in / Calendar API) pass straight through.
 self.addEventListener("fetch", event => {
-  if (event.request.method !== "GET") return;
+  const req = event.request;
+  if (req.method !== "GET") return;
+  if (new URL(req.url).origin !== self.location.origin) return; // don't touch Google etc.
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-      return fetch(event.request).then(resp => {
-        // Cache same-origin successful responses for next time.
-        if (resp.ok && new URL(event.request.url).origin === self.location.origin) {
-          const copy = resp.clone();
-          caches.open(CACHE_VERSION).then(c => c.put(event.request, copy));
-        }
-        return resp;
-      }).catch(() => cached);
-    })
+    fetch(req).then(resp => {
+      if (resp && resp.ok) {
+        const copy = resp.clone();
+        caches.open(CACHE_VERSION).then(c => c.put(req, copy));
+      }
+      return resp;
+    }).catch(() =>
+      caches.match(req).then(c => c || (req.mode === "navigate" ? caches.match("./index.html") : undefined))
+    )
   );
 });

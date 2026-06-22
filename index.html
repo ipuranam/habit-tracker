@@ -42,6 +42,14 @@
   <!-- Register the service worker (skips gracefully on file:// or older browsers) -->
   <script>
     if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+      // When a freshly-installed service worker takes control, reload once so
+      // the page picks up the new version automatically (no manual cache clearing).
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("sw.js").catch(err => console.warn("SW registration failed:", err));
       });
