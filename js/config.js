@@ -17,7 +17,7 @@
 window.HT = window.HT || {};
 
 HT.DEFAULT_CONFIG = {
-  version: 1,
+  version: 2,
   weekStartDow: 1, // Monday — resets weekly drinking count & weekly views
 
   // Eating windows per weekday. Each day is a list of {start,end} windows
@@ -34,11 +34,15 @@ HT.DEFAULT_CONFIG = {
   },
 
   // Habits. `type` selects which engine handles it:
-  //   "tap-streak"   -> tap once/day; track current streak + lifetime total
+  //   "daily-check"  -> check once/day; track streak, lifetime total, and
+  //                     completion % over recent windows. Add your own freely.
   //   "weekly-limit" -> allowed N days/week; flag when exceeded; log details
   habits: [
-    { id: "no-smoking", name: "No smoking", icon: "🚭", type: "tap-streak" },
-    { id: "drinking",   name: "Drinking",   icon: "🍷", type: "weekly-limit",
+    { id: "no-smoking",  name: "No smoking",  icon: "🚭", type: "daily-check" },
+    { id: "workout",     name: "Workout",     icon: "🏋️", type: "daily-check" },
+    { id: "eat-healthy", name: "Eat healthy", icon: "🥗", type: "daily-check" },
+    { id: "fasted",      name: "Fasted",      icon: "⏱️", type: "daily-check" },
+    { id: "drinking",    name: "Drinking",    icon: "🍷", type: "weekly-limit",
       limitPerWeek: 1, logFields: ["what", "amount"] },
   ],
 

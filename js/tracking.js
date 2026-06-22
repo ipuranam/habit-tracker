@@ -43,6 +43,14 @@ HT.tracking = (function () {
     return store.allDayKeys().reduce((sum, k) => sum + (dayHabitDone(k, id) ? 1 : 0), 0);
   }
 
+  // How many of the last `days` days (ending today) the habit was done.
+  function habitDoneLastDays(id, days) {
+    const today = todayKey();
+    let n = 0;
+    for (let i = 0; i < days; i++) if (dayHabitDone(addDays(today, -i), id)) n++;
+    return n;
+  }
+
   /* ---------- recurring tasks ---------- */
   function toggleTask(key, id) {
     return store.updateDay(key, rec => {
@@ -85,6 +93,25 @@ HT.tracking = (function () {
 
   function taskTotal(id) {
     return store.allDayKeys().reduce((sum, k) => sum + (dayTaskDone(k, id) ? 1 : 0), 0);
+  }
+
+  // Over the last `days` days: how many were SCHEDULED and how many DONE.
+  // (For scheduled tasks — rate is over scheduled occurrences, not calendar days.)
+  function taskRateLastDays(cfg, id, days) {
+    const today = todayKey();
+    let scheduled = 0, done = 0;
+    for (let i = 0; i < days; i++) {
+      const k = addDays(today, -i);
+      if (isScheduled(cfg, id, k)) { scheduled++; if (dayTaskDone(k, id)) done++; }
+    }
+    return { scheduled, done };
+  }
+  // For as-needed tasks: how many of the last `days` days it was done.
+  function taskDoneLastDays(id, days) {
+    const today = todayKey();
+    let n = 0;
+    for (let i = 0; i < days; i++) if (dayTaskDone(addDays(today, -i), id)) n++;
+    return n;
   }
 
   // For as-needed tasks: the most recent day STRICTLY BEFORE `beforeKey` the
@@ -177,8 +204,9 @@ HT.tracking = (function () {
 
   return {
     dayHabitDone, dayTaskDone,
-    toggleHabit, habitStreak, habitTotal,
+    toggleHabit, habitStreak, habitTotal, habitDoneLastDays,
     toggleTask, isScheduled, taskStreak, taskTotal, taskById, lastTaskDoneBefore,
+    taskRateLastDays, taskDoneLastDays,
     logDrink, clearDrink, drinkLog, drinkDaysInWeek,
     addMeal, removeMeal,
     getSleep, setSleep, clearSleep, sleepDurationMin, avgSleepMin,

@@ -20,8 +20,13 @@
   const TABS = [
     { id: "today",    icon: "📅", label: "Today" },
     { id: "history",  icon: "🗓️", label: "Calendar" },
+    { id: "stats",    icon: "📊", label: "Stats" },
     { id: "settings", icon: "⚙️", label: "Settings" },
   ];
+
+  // Daily yes/no habits (No smoking, Workout, Eat healthy, Fasted, …).
+  // "tap-streak" kept for backward compatibility with older saved configs.
+  function isDailyCheck(h) { return h.type === "daily-check" || h.type === "tap-streak"; }
 
   const state = {
     tab: "today", histDate: util.todayKey(),
@@ -48,6 +53,7 @@
     const view = document.getElementById("view");
     if (state.tab === "today")        view.innerHTML = renderToday();
     else if (state.tab === "history") view.innerHTML = renderHistory();
+    else if (state.tab === "stats")   view.innerHTML = renderStats();
     else                              view.innerHTML = renderSettings();
     if (state.tab === "today") updateFastingLive();
     window.scrollTo(0, 0);
@@ -56,24 +62,23 @@
   /* ============================================================
      Shared day sections (used by Today and History)
      ============================================================ */
-  function noSmokingCard(key, isToday) {
-    const h = cfg.habits.find(x => x.type === "tap-streak");
-    if (!h) return "";
-    const done = tracking.dayHabitDone(key, h.id);
-    const streak = tracking.habitStreak(h.id);
-    const total = tracking.habitTotal(h.id);
-    return `
-      <div class="card">
-        <h2>${h.icon || ""} ${esc(h.name)}</h2>
-        <button class="tapbtn ${done ? "is-done" : ""}" data-action="toggle-habit"
-                data-id="${h.id}" data-key="${key}">
-          ${done ? "✓ Done" + (isToday ? " today" : "") : (isToday ? "Tap to mark today" : "Mark this day")}
-        </button>
-        <div class="stat-row">
-          <div class="stat"><span class="stat-num">${streak}</span><span class="stat-lbl">day streak</span></div>
-          <div class="stat"><span class="stat-num">${total}</span><span class="stat-lbl">days total</span></div>
-        </div>
-      </div>`;
+  // Unified checklist of all daily yes/no habits.
+  function dailyCard(key) {
+    const habits = cfg.habits.filter(isDailyCheck);
+    if (!habits.length) return "";
+    const rows = habits.map(h => {
+      const done = tracking.dayHabitDone(key, h.id);
+      const streak = tracking.habitStreak(h.id);
+      return `
+        <label class="checkrow">
+          <input type="checkbox" ${done ? "checked" : ""} data-action="toggle-habit" data-id="${h.id}" data-key="${key}">
+          <span class="checkrow-main">
+            <span class="checkrow-name ${done ? "is-done" : ""}">${h.icon || ""} ${esc(h.name)}</span>
+          </span>
+          <span class="checkrow-streak" title="current streak">🔥 ${streak}</span>
+        </label>`;
+    }).join("");
+    return `<div class="card"><h2>Daily</h2>${rows}</div>`;
   }
 
   function isAsNeeded(t) { return t.mode === "asNeeded"; }
@@ -218,7 +223,7 @@
   function renderToday() {
     const key = util.todayKey();
     return fastingCard() + timelineCard(key)
-      + noSmokingCard(key, true)
+      + dailyCard(key)
       + tasksCard(key, true)
       + drinkingCard(key)
       + mealsCard(key)
@@ -300,23 +305,35 @@
   /* ============================================================
      History screen — scrub past days + fast history
      ============================================================ */
+  // One-line summary of a day's eating windows (for planning future days).
+  function eatingSummary(key) {
+    const segs = fasting.dayEatingSegments(cfg, key);
+    if (!segs.length) return "🍽️ Fasting all day";
+    return "🍽️ Eat " + segs.map(s =>
+      `${util.minutesToLabel(s.startMin)}–${util.minutesToLabel(s.endMin)}`).join(", ");
+  }
+
   function renderHistory() {
     const key = state.histDate;
-    const isToday = key === util.todayKey();
+    const today = util.todayKey();
+    const isToday = key === today;
+    const rel = isToday ? "Today"
+      : (key > today ? `in ${util.daysBetween(today, key)}d` : `${util.daysBetween(key, today)}d ago`);
     const nav = `
       <div class="card daynav">
         <button class="iconbtn" data-action="hist-prev">‹</button>
         <div class="daynav-mid">
           <div class="daynav-date">${util.prettyDate(key)}</div>
-          ${isToday ? '<div class="muted" style="font-size:.8rem">Today</div>'
-                    : `<button class="linkbtn" data-action="hist-today">Jump to today</button>`}
+          <div class="muted" style="font-size:.78rem">${eatingSummary(key)}</div>
+          ${isToday ? '<div class="muted" style="font-size:.78rem">Today</div>'
+                    : `<button class="linkbtn" data-action="hist-today" style="margin-top:2px">${rel} · jump to today</button>`}
         </div>
-        <button class="iconbtn" data-action="hist-next" ${isToday ? "disabled" : ""}>›</button>
+        <button class="iconbtn" data-action="hist-next">›</button>
       </div>`;
 
     return calendarCard()
       + nav
-      + noSmokingCard(key, isToday)
+      + dailyCard(key)
       + tasksCard(key, isToday)
       + drinkingCard(key)
       + mealsCard(key)
@@ -341,16 +358,13 @@
     const cls = ["cal-cell"];
     if (key === today) cls.push("today");
     if (key === state.histDate) cls.push("sel");
-    const future = key > today;
-    if (future) cls.push("future");
+    if (key > today) cls.push("future"); // future days are dimmed but navigable
     // Dot is colored by the day's rating (mood map); neutral if only other activity.
     let dot = "";
-    if (!future) {
-      const r = tracking.getRating(key);
-      if (r) dot = `<span class="cal-dot r${r}"></span>`;
-      else if (hasActivity(key)) dot = `<span class="cal-dot"></span>`;
-    }
-    return `<button class="${cls.join(" ")}" data-action="cal-day" data-key="${key}" ${future ? "disabled" : ""}>
+    const r = tracking.getRating(key);
+    if (r) dot = `<span class="cal-dot r${r}"></span>`;
+    else if (hasActivity(key)) dot = `<span class="cal-dot"></span>`;
+    return `<button class="${cls.join(" ")}" data-action="cal-day" data-key="${key}">
         <span class="cal-num">${d.getDate()}</span>${dot}
       </button>`;
   }
@@ -421,10 +435,107 @@
   function labelTime(d) { return util.minutesToLabel(d.getHours() * 60 + d.getMinutes()); }
 
   /* ============================================================
+     Stats screen — streaks, totals, completion %
+     ============================================================ */
+  function statBar(done, total) {
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    return `
+      <div class="statrow">
+        <div class="statbar"><div class="statbar-fill" style="width:${pct}%"></div></div>
+        <span class="statval">${done}/${total} · ${pct}%</span>
+      </div>`;
+  }
+
+  function renderStats() {
+    return dailyStatsCard() + taskStatsCard() + reflectionStatsCard();
+  }
+
+  function dailyStatsCard() {
+    const habits = cfg.habits.filter(isDailyCheck);
+    if (!habits.length) return "";
+    const items = habits.map(h => {
+      const streak = tracking.habitStreak(h.id);
+      const total = tracking.habitTotal(h.id);
+      const d7 = tracking.habitDoneLastDays(h.id, 7);
+      const d30 = tracking.habitDoneLastDays(h.id, 30);
+      return `
+        <div class="statitem">
+          <div class="statitem-head">
+            <span>${h.icon || ""} ${esc(h.name)}</span>
+            <span class="muted">🔥 ${streak} · ${total} total</span>
+          </div>
+          <div class="statwin"><span class="statwin-lbl muted">7d</span>${statBar(d7, 7)}</div>
+          <div class="statwin"><span class="statwin-lbl muted">30d</span>${statBar(d30, 30)}</div>
+        </div>`;
+    }).join("");
+    return `<div class="card"><h2>Daily habits</h2>${items}</div>`;
+  }
+
+  function taskStatsCard() {
+    if (!cfg.recurring.length) return "";
+    const items = cfg.recurring.map(t => {
+      if (isAsNeeded(t)) {
+        const c30 = tracking.taskDoneLastDays(t.id, 30);
+        const last = tracking.lastTaskDoneBefore(t.id, util.addDays(util.todayKey(), 1));
+        const lastTxt = last ? (last === util.todayKey() ? "today" : util.daysBetween(last, util.todayKey()) + "d ago") : "never";
+        return `
+          <div class="statitem">
+            <div class="statitem-head"><span>${esc(t.name)}</span><span class="muted">as needed</span></div>
+            <div class="statline muted">${c30}× in last 30 days · last: ${lastTxt}</div>
+          </div>`;
+      }
+      const streak = tracking.taskStreak(cfg, t.id);
+      const r30 = tracking.taskRateLastDays(cfg, t.id, 30);
+      return `
+        <div class="statitem">
+          <div class="statitem-head"><span>${esc(t.name)}</span><span class="muted">🔥 ${streak}</span></div>
+          <div class="statwin"><span class="statwin-lbl muted">30d</span>${statBar(r30.done, r30.scheduled)}</div>
+        </div>`;
+    }).join("");
+    return `<div class="card"><h2>Recurring tasks</h2><p class="muted" style="font-size:.78rem;margin-top:0">Scheduled tasks are rated over their scheduled days.</p>${items}</div>`;
+  }
+
+  function reflectionStatsCard() {
+    const today = util.todayKey();
+    const s7 = tracking.avgSleepMin(today, 7), s30 = tracking.avgSleepMin(today, 30);
+    const r7 = tracking.avgRating(today, 7), r30 = tracking.avgRating(today, 30);
+    const drink30 = tracking.habitDoneLastDays("drinking", 30);
+    const row = (lbl, a, b) => `
+      <div class="reflect-row">
+        <span>${lbl}</span>
+        <span class="muted">7d: <strong>${a}</strong> · 30d: <strong>${b}</strong></span>
+      </div>`;
+    return `
+      <div class="card">
+        <h2>Reflections</h2>
+        ${row("😴 Avg sleep", s7 != null ? util.humanDuration(s7) : "—", s30 != null ? util.humanDuration(s30) : "—")}
+        ${row("⭐ Avg day rating", r7 != null ? r7.toFixed(1) : "—", r30 != null ? r30.toFixed(1) : "—")}
+        <div class="reflect-row"><span>🍷 Drinking days</span><span class="muted">last 30d: <strong>${drink30}</strong></span></div>
+      </div>`;
+  }
+
+  /* ============================================================
      Settings screen — editable, data-driven config
      ============================================================ */
   function renderSettings() {
-    return recurringEditor() + scheduleEditor() + drinkingLimitEditor() + anchorsEditor() + dataCard();
+    return dailyHabitsEditor() + recurringEditor() + scheduleEditor() + drinkingLimitEditor() + anchorsEditor() + dataCard();
+  }
+
+  function dailyHabitsEditor() {
+    const rows = cfg.habits.filter(isDailyCheck).map(h =>
+      `<div class="edit-row">
+         <div class="edit-row-main">${h.icon || ""} ${esc(h.name)}</div>
+         <button class="iconbtn" data-action="delete-habit" data-id="${h.id}" title="Delete">🗑</button>
+       </div>`).join("");
+    const form = `
+      <form class="taskform" data-action="create-daily-habit">
+        <div class="form-line" style="gap:8px">
+          <input name="icon" placeholder="🙂" maxlength="2" style="width:60px;text-align:center">
+          <input name="name" placeholder="New daily habit" autocomplete="off" required style="flex:1">
+        </div>
+        <div class="form-actions"><button class="btn btn-accent" type="submit">+ Add daily habit</button></div>
+      </form>`;
+    return `<div class="card"><h2>Daily habits</h2>${rows || '<p class="muted">None yet.</p>'}${form}</div>`;
   }
 
   function dayToggleRow(selectedDays, namePrefix) {
@@ -553,8 +664,13 @@
     switch (a) {
       case "go": state.tab = el.dataset.tab; rerender(); break;
 
-      case "toggle-habit": tracking.toggleHabit(key, id); render(); break;
-      case "toggle-task":  /* handled in change */ break;
+      case "toggle-habit": /* handled in change (checkbox) */ break;
+      case "toggle-task":  /* handled in change (checkbox) */ break;
+      case "delete-habit":
+        if (confirm("Delete this daily habit? Its past check-offs stay in storage but it stops appearing.")) {
+          cfg.habits = cfg.habits.filter(h => h.id !== id); saveCfg(); render();
+        }
+        break;
 
       case "clear-drink":  tracking.clearDrink(key); render(); break;
       case "remove-meal":  tracking.removeMeal(key, Number(el.dataset.at)); render(); break;
@@ -562,9 +678,7 @@
       case "clear-sleep":  tracking.clearSleep(key); render(); break;
 
       case "hist-prev":  state.histDate = util.addDays(state.histDate, -1); state.calAnchor = state.histDate; render(); break;
-      case "hist-next":
-        if (state.histDate < util.todayKey()) { state.histDate = util.addDays(state.histDate, 1); state.calAnchor = state.histDate; render(); }
-        break;
+      case "hist-next":  state.histDate = util.addDays(state.histDate, 1);  state.calAnchor = state.histDate; render(); break;
       case "hist-today": state.histDate = util.todayKey(); state.calAnchor = state.histDate; render(); break;
 
       case "cal-day":   state.histDate = el.dataset.key; render(); break;
@@ -608,6 +722,8 @@
     }
     if (el.dataset.action === "toggle-task") {
       tracking.toggleTask(el.dataset.key, el.dataset.id); render();
+    } else if (el.dataset.action === "toggle-habit") {
+      tracking.toggleHabit(el.dataset.key, el.dataset.id); render();
     } else if (el.dataset.action === "save-limit") {
       const h = cfg.habits.find(x => x.type === "weekly-limit");
       h.limitPerWeek = Math.max(0, Math.min(7, Number(el.value) || 0)); saveCfg();
@@ -634,6 +750,11 @@
       render();
     } else if (a === "create-task" || a === "save-task") {
       saveTaskFromForm(form, a === "save-task" ? form.dataset.id : null);
+    } else if (a === "create-daily-habit") {
+      const name = (data.name || "").trim();
+      if (!name) return;
+      cfg.habits.push({ id: "habit-" + Date.now().toString(36), name, icon: (data.icon || "").trim(), type: "daily-check" });
+      saveCfg(); render();
     }
   }
 

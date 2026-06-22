@@ -297,7 +297,7 @@ html, body {
   font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .cal-cell.empty { background: transparent; cursor: default; }
-.cal-cell.future { opacity: 0.32; cursor: default; }
+.cal-cell.future { opacity: 0.5; } /* dimmed but still navigable */
 .cal-cell.today { outline: 2px solid var(--accent); }
 .cal-cell.sel { background: var(--accent); color: #fff; }
 .cal-dot {
@@ -313,6 +313,20 @@ html, body {
 .cal-cell.sel .cal-dot { background: #fff; }
 .cal-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
 .cal-foot-hint { font-size: 0.74rem; }
+
+/* ---- Stats screen ---- */
+.statitem { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.statitem:last-child { border-bottom: none; }
+.statitem-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-weight: 600; }
+.statwin { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.statwin-lbl { width: 28px; font-size: 0.74rem; flex: 0 0 auto; }
+.statrow { display: flex; align-items: center; gap: 8px; flex: 1; }
+.statbar { flex: 1; height: 8px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+.statbar-fill { height: 100%; background: var(--good); border-radius: 5px; transition: width 0.4s ease; }
+.statval { font-size: 0.78rem; color: var(--text-soft); white-space: nowrap; min-width: 82px; text-align: right; font-variant-numeric: tabular-nums; }
+.statline { font-size: 0.84rem; margin-top: 4px; }
+.reflect-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.reflect-row:last-child { border-bottom: none; }
 
 /* ---- History day nav ---- */
 .daynav { display: flex; align-items: center; justify-content: space-between; }

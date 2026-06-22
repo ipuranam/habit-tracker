@@ -37,11 +37,39 @@ HT.store = (function () {
   /* ---- Config ---- */
   function getConfig() {
     const saved = read(K_CONFIG, null);
-    if (saved) return saved;
+    if (saved) return migrate(saved);
     // First run: seed from the default (deep copy so we never mutate the default).
     const seed = JSON.parse(JSON.stringify(HT.DEFAULT_CONFIG));
     write(K_CONFIG, seed);
     return seed;
+  }
+
+  // One-time, version-gated upgrades to an already-saved config. Runs once per
+  // version bump, so it won't re-add things you intentionally deleted later.
+  function migrate(cfg) {
+    let changed = false;
+    if (!cfg.version) cfg.version = 1;
+    if (cfg.version < 2) {
+      cfg.habits = cfg.habits || [];
+      // Old "tap-streak" habits are now "daily-check".
+      cfg.habits.forEach(h => { if (h.type === "tap-streak") h.type = "daily-check"; });
+      // Add the new daily-check habits if they aren't present.
+      const additions = [
+        { id: "workout",     name: "Workout",     icon: "🏋️", type: "daily-check" },
+        { id: "eat-healthy", name: "Eat healthy", icon: "🥗", type: "daily-check" },
+        { id: "fasted",      name: "Fasted",      icon: "⏱️", type: "daily-check" },
+      ];
+      const insertAt = cfg.habits.findIndex(h => h.type === "weekly-limit");
+      additions.forEach(a => {
+        if (!cfg.habits.some(h => h.id === a.id)) {
+          if (insertAt >= 0) cfg.habits.splice(insertAt, 0, a); else cfg.habits.push(a);
+        }
+      });
+      cfg.version = 2;
+      changed = true;
+    }
+    if (changed) write(K_CONFIG, cfg);
+    return cfg;
   }
   function saveConfig(cfg) { write(K_CONFIG, cfg); }
 
