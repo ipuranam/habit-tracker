@@ -390,9 +390,14 @@ html, body {
 
 /* ---- Fast history ---- */
 .fast-list { list-style: none; margin: 0; padding: 0; }
-.fast-item { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.fast-item { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); }
 .fast-item:last-child { border-bottom: none; }
-.fast-dur { font-weight: 650; min-width: 72px; }
+.fast-dur { font-weight: 650; min-width: 66px; }
+.fast-when { flex: 1; font-size: 0.84rem; }
+.fast-item-edit { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.fast-form { display: flex; flex-direction: column; gap: 10px; padding: 6px 0; }
+.fast-form-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fast-form-row input { flex: 1; max-width: 220px; }
 
 /* ---- Settings editors ---- */
 .edit-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }

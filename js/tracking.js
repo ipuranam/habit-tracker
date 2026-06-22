@@ -168,10 +168,33 @@ HT.tracking = (function () {
     const a = store.getActiveFast();
     if (a) store.setActiveFast({ ...a, start: ts });
   }
-  function completedFasts() { return store.getFasts(); }
+  // Returns all completed fasts, ensuring each has a stable id (assigns + saves
+  // ids for any older entries that predate ids).
+  function completedFasts() {
+    const list = store.getFasts();
+    let changed = false;
+    list.forEach(f => {
+      if (!f.id) { f.id = "f-" + f.start.toString(36) + Math.floor(Math.random() * 1e4).toString(36); changed = true; }
+    });
+    if (changed) store.saveFasts(list);
+    return list;
+  }
   function lastCompletedFast() {
     const l = store.getFasts();
     return l.length ? l[l.length - 1] : null;
+  }
+  function addFast(start, end) {
+    const list = store.getFasts();
+    list.push({ id: "f-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), start, end });
+    store.saveFasts(list);
+  }
+  function updateFast(id, start, end) {
+    const list = store.getFasts();
+    const f = list.find(x => x.id === id);
+    if (f) { f.start = start; f.end = end; store.saveFasts(list); }
+  }
+  function removeFast(id) {
+    store.saveFasts(store.getFasts().filter(x => x.id !== id));
   }
 
   /* ---------- meals ---------- */
@@ -339,6 +362,7 @@ HT.tracking = (function () {
     logDrink, clearDrink, drinkLog, drinkDaysInWeek,
     addMeal, removeMeal,
     activeFast, startFast, stopFast, setFastStart, completedFasts, lastCompletedFast,
+    addFast, updateFast, removeFast,
     getSleep, setSleep, clearSleep, sleepDurationMin, avgSleepMin,
     getRating, setRating, avgRating,
     getNote, setNote,

@@ -33,6 +33,7 @@
     tab: "home", histDate: util.todayKey(),
     calMode: "month", calAnchor: util.todayKey(),  // calendar view state
     editTaskId: null, addingTask: false,
+    editFastId: null, addingFast: false,           // past-fast editor state
   };
   let cfg = null;
 
@@ -653,17 +654,40 @@
       </div>`;
   }
 
+  // Shared add/edit form for a logged fast. `fast` null = adding a new one.
+  function fastForm(fast) {
+    const isEdit = !!fast;
+    const startVal = toLocalInputValue(isEdit ? fast.start : Date.now() - fastGoalHours() * 3600000);
+    const endVal = toLocalInputValue(isEdit ? fast.end : Date.now());
+    const maxNow = toLocalInputValue(Date.now());
+    return `
+      <form class="fast-form" data-action="${isEdit ? "save-fast" : "create-fast"}" ${isEdit ? `data-id="${fast.id}"` : ""}>
+        <label class="fast-form-row"><span class="muted">Start</span>
+          <input type="datetime-local" name="start" value="${startVal}" max="${maxNow}"></label>
+        <label class="fast-form-row"><span class="muted">End</span>
+          <input type="datetime-local" name="end" value="${endVal}" max="${maxNow}"></label>
+        <div class="form-actions">
+          <button class="btn btn-accent" type="submit">${isEdit ? "Save" : "Add fast"}</button>
+          <button class="btn" type="button" data-action="cancel-fast-edit">Cancel</button>
+        </div>
+      </form>`;
+  }
+
   function fastHistoryCard() {
-    const fasts = tracking.completedFasts().slice().sort((a, b) => b.end - a.end).slice(0, 12);
-    if (!fasts.length) return `<div class="card"><h2>Past fasts</h2><p class="muted">No fasts logged yet. Use the Start/End fast timer on Home.</p></div>`;
-    const rows = fasts.map(f => {
+    const fasts = tracking.completedFasts().slice().sort((a, b) => b.end - a.end).slice(0, 30);
+    const rows = fasts.length ? fasts.map(f => {
+      if (state.editFastId === f.id) return `<li class="fast-item-edit">${fastForm(f)}</li>`;
       const s = new Date(f.start), e = new Date(f.end);
       return `<li class="fast-item">
           <span class="fast-dur">${util.humanDuration((f.end - f.start) / 60000)}</span>
-          <span class="muted">${util.MONTH_SHORT[s.getMonth()]} ${s.getDate()}, ${labelTime(s)} → ${labelTime(e)}</span>
+          <span class="muted fast-when">${util.MONTH_SHORT[s.getMonth()]} ${s.getDate()}, ${labelTime(s)} → ${labelTime(e)}</span>
+          <button class="iconbtn" data-action="edit-fast" data-id="${f.id}" title="Edit">✎</button>
+          <button class="iconbtn" data-action="delete-fast" data-id="${f.id}" title="Delete">🗑</button>
         </li>`;
-    }).join("");
-    return `<div class="card"><h2>Past fasts</h2><ul class="fast-list">${rows}</ul></div>`;
+    }).join("") : `<li class="muted">No fasts logged yet. Use the Start/End fast timer on Home.</li>`;
+    const add = state.addingFast ? fastForm(null)
+      : `<button class="btn" data-action="add-fast-toggle" style="margin-top:10px">+ Add a past fast</button>`;
+    return `<div class="card"><h2>Past fasts</h2><ul class="fast-list">${rows}</ul>${add}</div>`;
   }
   function labelTime(d) { return util.minutesToLabel(d.getHours() * 60 + d.getMinutes()); }
 
@@ -1128,7 +1152,11 @@
     const key = el.dataset.key, id = el.dataset.id;
 
     switch (a) {
-      case "go": state.tab = el.dataset.tab; rerender(); break;
+      case "go":
+        state.tab = el.dataset.tab;
+        state.editFastId = null; state.addingFast = false; // close any open fast editor
+        rerender();
+        break;
 
       case "toggle-habit": /* handled in change (checkbox) */ break;
       case "toggle-task":  /* handled in change (checkbox) */ break;
@@ -1149,6 +1177,12 @@
         render();
         break;
       }
+      case "edit-fast":   state.editFastId = id; state.addingFast = false; render(); break;
+      case "add-fast-toggle": state.addingFast = true; state.editFastId = null; render(); break;
+      case "cancel-fast-edit": state.editFastId = null; state.addingFast = false; render(); break;
+      case "delete-fast":
+        if (confirm("Delete this fast?")) { tracking.removeFast(id); render(); }
+        break;
       case "remove-work":  tracking.removeWorkTodo(id); render(); break;
 
       case "hist-prev":  state.histDate = util.addDays(state.histDate, -1); state.calAnchor = state.histDate; render(); break;
@@ -1276,6 +1310,12 @@
       render();
     } else if (a === "create-task" || a === "save-task") {
       saveTaskFromForm(form, a === "save-task" ? form.dataset.id : null);
+    } else if (a === "save-fast" || a === "create-fast") {
+      const v = readFastForm(form);
+      if (!v) return;
+      if (a === "save-fast") tracking.updateFast(form.dataset.id, v.start, v.end);
+      else tracking.addFast(v.start, v.end);
+      state.editFastId = null; state.addingFast = false; render();
     } else if (a === "create-daily-habit") {
       const name = (data.name || "").trim();
       if (!name) return;
@@ -1304,6 +1344,17 @@
       return base.getTime();
     }
     return Date.now();
+  }
+
+  // Read + validate the start/end of a fast form. Returns {start,end} or null.
+  function readFastForm(form) {
+    const fd = new FormData(form);
+    const start = new Date(fd.get("start")).getTime();
+    const end = new Date(fd.get("end")).getTime();
+    if (isNaN(start) || isNaN(end)) { flash("Enter a start and end"); return null; }
+    if (end <= start) { flash("End must be after start"); return null; }
+    if (end > Date.now() + 60000) { flash("End can't be in the future"); return null; }
+    return { start, end };
   }
 
   // Turn bedtime/wake "HH:MM" into timestamps for the night that ends on `key`.
