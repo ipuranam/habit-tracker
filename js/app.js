@@ -55,7 +55,7 @@
     else if (state.tab === "history") view.innerHTML = renderHistory();
     else if (state.tab === "stats")   view.innerHTML = renderStats();
     else                              view.innerHTML = renderSettings();
-    if (state.tab === "today") updateFastingLive();
+    if (state.tab === "today") { updateFastingLive(); paintTimeline(); }
     window.scrollTo(0, 0);
   }
 
@@ -262,7 +262,7 @@
      ============================================================ */
   function renderToday() {
     const key = util.todayKey();
-    return fastingCard() + timelineCard(key)
+    return fastingCard() + timelineCard()
       + dailyCard(key)
       + tasksCard(key, true)
       + drinkingCard(key)
@@ -286,30 +286,70 @@
       </div>`;
   }
 
-  function timelineCard(key) {
-    const segs = fasting.dayEatingSegments(cfg, key);
-    const pct = m => (m / 1440) * 100;
-    const eating = segs.map(s =>
-      `<div class="tl-eat" style="left:${pct(s.startMin)}%;width:${pct(s.endMin - s.startMin)}%"
-            title="Eating ${util.minutesToLabel(s.startMin)}–${util.minutesToLabel(s.endMin)}"></div>`).join("");
-    const dow = util.weekdayOf(key);
-    const anchors = (cfg.anchors || []).filter(a => a.days.includes(dow)).map(a => {
-      const s = util.hmToMinutes(a.start), e = util.hmToMinutes(a.end);
-      return `<div class="tl-anchor" style="left:${pct(s)}%;width:${pct(e - s)}%"
-                   title="${esc(a.name)} ${util.minutesToLabel(s)}–${util.minutesToLabel(e)}"></div>`;
-    }).join("");
-    const ticks = [6, 12, 18].map(h =>
-      `<div class="tl-tick" style="left:${pct(h * 60)}%"><span>${util.minutesToLabel(h * 60)}</span></div>`).join("");
+  // Rolling-window timeline: a slice of the day around "now" instead of a full
+  // 24h bar, so the relevant blocks aren't squashed. Filled by paintTimeline().
+  const TL_HOURS_BEFORE = 3;   // how much recent past to show
+  const TL_HOURS_AFTER  = 9;   // how much of the upcoming day to show
+
+  function timelineCard() {
     return `
       <div class="card">
-        <h2>Today’s rhythm</h2>
-        <div class="timeline">${eating}${anchors}${ticks}<div class="tl-now" id="tl-now"></div></div>
+        <h2>Today’s rhythm <span class="tl-range muted" id="tl-range"></span></h2>
+        <div class="timeline" id="timeline"></div>
         <div class="tl-legend muted">
           <span><i class="sw eat"></i>Eating</span>
           <span><i class="sw fast"></i>Fasting</span>
           <span><i class="sw anchor"></i>Work</span>
         </div>
       </div>`;
+  }
+
+  // Draw the rolling window using absolute time, so it crosses midnight cleanly.
+  function paintTimeline() {
+    const el = document.getElementById("timeline");
+    if (!el) return;
+    const now = Date.now();
+    const winStart = now - TL_HOURS_BEFORE * 3600000;
+    const winEnd   = now + TL_HOURS_AFTER  * 3600000;
+    const span = winEnd - winStart;
+    const pct = t => ((t - winStart) / span) * 100;
+    const clip = (s, e) => ({ s: Math.max(s, winStart), e: Math.min(e, winEnd) });
+
+    let html = "";
+
+    // Eating windows (absolute intervals already span across midnight).
+    fasting.absoluteIntervals(cfg, util.todayKey()).forEach(iv => {
+      const { s, e } = clip(iv.start, iv.end);
+      if (e > s) html += `<div class="tl-eat" style="left:${pct(s)}%;width:${pct(e) - pct(s)}%"></div>`;
+    });
+
+    // Anchors (e.g. work) for any date the window touches.
+    const dates = [util.addDays(util.todayKey(), -1), util.todayKey(), util.addDays(util.todayKey(), 1)];
+    (cfg.anchors || []).forEach(a => dates.forEach(dk => {
+      if (!a.days.includes(util.weekdayOf(dk))) return;
+      const mid = util.keyToDate(dk).getTime();
+      const { s, e } = clip(mid + util.hmToMinutes(a.start) * 60000, mid + util.hmToMinutes(a.end) * 60000);
+      if (e > s) html += `<div class="tl-anchor" style="left:${pct(s)}%;width:${pct(e) - pct(s)}%" title="${esc(a.name)}"></div>`;
+    }));
+
+    // Hour ticks every 3 hours within the window.
+    const t0 = new Date(winStart); t0.setMinutes(0, 0, 0);
+    for (let t = t0.getTime(); t <= winEnd; t += 3600000) {
+      const d = new Date(t);
+      if (t >= winStart && d.getHours() % 3 === 0) {
+        html += `<div class="tl-tick" style="left:${pct(t)}%"><span>${util.minutesToLabel(d.getHours() * 60)}</span></div>`;
+      }
+    }
+
+    // "Now" marker (sits at a fixed fraction since the window follows now).
+    html += `<div class="tl-now" style="left:${pct(now)}%"></div>`;
+    el.innerHTML = html;
+
+    const range = document.getElementById("tl-range");
+    if (range) {
+      const f = ms => { const d = new Date(ms); return util.minutesToLabel(d.getHours() * 60 + d.getMinutes()); };
+      range.textContent = `${f(winStart)} – ${f(winEnd)}`;
+    }
   }
 
   function updateFastingLive() {
@@ -340,9 +380,12 @@
       fill.style.width = Math.max(0, Math.min(100, frac * 100)) + "%";
       fill.className = "fasting-bar-fill " + (eating ? "is-eat" : "is-fast");
     }
-    const marker = document.getElementById("tl-now");
-    if (marker) marker.style.left = ((now.getHours() * 60 + now.getMinutes()) / 1440) * 100 + "%";
+
+    // Repaint the rolling timeline once per minute (it shifts slowly with now).
+    const curMin = now.getHours() * 60 + now.getMinutes();
+    if (curMin !== lastTimelineMin) { lastTimelineMin = curMin; paintTimeline(); }
   }
+  let lastTimelineMin = -1;
 
   /* ============================================================
      History screen — scrub past days + fast history

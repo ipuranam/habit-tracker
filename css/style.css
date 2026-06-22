@@ -168,7 +168,10 @@ html, body {
 .fasting-bar-fill.is-eat  { background: var(--good); }
 .fasting-bar-fill.is-fast { background: var(--accent); }
 
-/* ---- 24-hour timeline ---- */
+/* ---- Rolling timeline caption ---- */
+.tl-range { font-size: 0.74rem; font-weight: 400; margin-left: 6px; }
+
+/* ---- Rolling timeline ---- */
 .timeline {
   position: relative; height: 34px; border-radius: 8px;
   background: var(--surface-2); margin: 6px 0 26px; overflow: visible;
