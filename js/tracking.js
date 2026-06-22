@@ -246,13 +246,36 @@ HT.tracking = (function () {
      Carry-over model: an unfinished item always shows in its list; a finished
      one shows only during the period it was completed in (today / this week),
      so completed items drop off afterward but open ones never get lost. */
-  function addWorkTodo(scope, text) {
+  function addWorkTodo(scope, text, meta) {
     const list = store.getWorkTodos();
-    list.push({
+    const item = {
       id: "w-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36),
       text: (text || "").trim(), scope, done: false, created: Date.now(), doneAt: null,
-    });
+    };
+    if (meta && meta.evtId) item.evtId = meta.evtId; // link to a calendar event for dedup
+    list.push(item);
     store.saveWorkTodos(list);
+  }
+
+  // Bulk-import calendar events as today's work to-dos. Dedups by event id
+  // against the whole list, so re-importing never creates doubles. Returns
+  // how many were newly added.
+  function importCalendarEvents(events) {
+    if (!events || !events.length) return 0;
+    const list = store.getWorkTodos();
+    const seen = new Set(list.map(t => t.evtId).filter(Boolean));
+    let added = 0;
+    events.forEach(ev => {
+      if (ev.id && seen.has(ev.id)) return;
+      list.push({
+        id: "w-" + Date.now().toString(36) + (added++) + Math.floor(Math.random() * 1e4).toString(36),
+        text: ev.title || "(no title)", scope: "day", done: false, created: Date.now(), doneAt: null,
+        evtId: ev.id,
+      });
+      if (ev.id) seen.add(ev.id);
+    });
+    if (added) store.saveWorkTodos(list);
+    return added;
   }
   function toggleWorkTodo(id) {
     const list = store.getWorkTodos();
@@ -283,7 +306,7 @@ HT.tracking = (function () {
 
   return {
     dayHabitDone, dayTaskDone,
-    addWorkTodo, toggleWorkTodo, removeWorkTodo, visibleWork, openWorkCount,
+    addWorkTodo, toggleWorkTodo, removeWorkTodo, visibleWork, openWorkCount, importCalendarEvents,
     toggleHabit, habitStreak, habitTotal, habitDoneLastDays,
     toggleTask, isScheduled, taskStreak, taskTotal, taskById, lastTaskDoneBefore,
     taskRateLastDays, taskDoneLastDays,

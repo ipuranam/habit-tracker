@@ -317,11 +317,12 @@
             return `<div class="evt-row">
                 <span class="evt-time muted">${time}</span>
                 <span class="evt-title">${esc(ev.title)}</span>
-                <button class="iconbtn" data-action="event-to-work" data-title="${esc(ev.title)}" title="Add to Work">＋</button>
+                <button class="iconbtn" data-action="event-to-work" data-title="${esc(ev.title)}" data-evtid="${esc(ev.id)}" title="Add to Work">＋</button>
               </div>`;
           }).join("")
         : `<p class="muted" style="margin:4px 0 0">No events today.</p>`;
-      if (!connected) body += `<p class="muted" style="font-size:.76rem;margin-bottom:0">Showing saved events · <button class="linkbtn" data-action="gcal-connect">refresh</button></p>`;
+      if (events.length) body += `<button class="btn" data-action="import-events" style="margin-top:12px">Import all to Work</button>`;
+      if (!connected) body += `<p class="muted" style="font-size:.76rem;margin:8px 0 0">Showing saved events · <button class="linkbtn" data-action="gcal-connect">refresh</button></p>`;
     }
     return `<div class="card"><h2>📆 Today’s events</h2>${body}</div>`;
   }
@@ -997,7 +998,13 @@
 
       case "gcal-connect":    gcalConnect(); break;
       case "gcal-disconnect": HT.gcal.disconnect(); render(); break;
-      case "event-to-work":   tracking.addWorkTodo("day", el.dataset.title); flash("Added to Work"); render(); break;
+      case "event-to-work":   tracking.addWorkTodo("day", el.dataset.title, { evtId: el.dataset.evtid }); flash("Added to Work"); render(); break;
+      case "import-events": {
+        const n = tracking.importCalendarEvents(HT.gcal.cachedEvents(util.todayKey()) || []);
+        flash(n ? `Added ${n} to Work` : "Already in Work");
+        render();
+        break;
+      }
     }
   }
 
