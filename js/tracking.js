@@ -1,0 +1,145 @@
+/* ============================================================
+   tracking.js — habit/task data operations + streak math.
+
+   Pure-ish logic on top of HT.store. No DOM. Covers:
+     - tap-streak habits (e.g. "No smoking"): toggle, current streak, lifetime total
+     - recurring tasks: toggle, streak over SCHEDULED days only, total
+     - weekly-limit habits (e.g. "Drinking"): log, count this week, over-limit
+     - meals: add / remove
+   ============================================================ */
+window.HT = window.HT || {};
+
+HT.tracking = (function () {
+  const { todayKey, addDays, weekdayOf, weekKeyOf } = HT.util;
+  const store = HT.store;
+
+  /* ---------- small lookups ---------- */
+  function isDone(map, id) { return !!(map && map[id] && map[id].done); }
+  function dayHabitDone(key, id) { return isDone(store.getDay(key).habits, id); }
+  function dayTaskDone(key, id)  { return isDone(store.getDay(key).recurring, id); }
+
+  /* ---------- tap-streak habits (No smoking) ---------- */
+  function toggleHabit(key, id) {
+    return store.updateDay(key, rec => {
+      if (isDone(rec.habits, id)) delete rec.habits[id];
+      else rec.habits[id] = { done: true, at: Date.now() };
+    });
+  }
+
+  // Consecutive days ending at today (or yesterday if today not yet done).
+  function habitStreak(id) {
+    const today = todayKey();
+    let cursor = dayHabitDone(today, id) ? today : addDays(today, -1);
+    let n = 0;
+    // hard cap so a corrupt store can't loop forever
+    for (let i = 0; i < 4000 && dayHabitDone(cursor, id); i++) {
+      n++; cursor = addDays(cursor, -1);
+    }
+    return n;
+  }
+
+  // Lifetime count of days the habit was marked done.
+  function habitTotal(id) {
+    return store.allDayKeys().reduce((sum, k) => sum + (dayHabitDone(k, id) ? 1 : 0), 0);
+  }
+
+  /* ---------- recurring tasks ---------- */
+  function toggleTask(key, id) {
+    return store.updateDay(key, rec => {
+      if (isDone(rec.recurring, id)) delete rec.recurring[id];
+      else rec.recurring[id] = { done: true, at: Date.now() };
+    });
+  }
+
+  function taskById(cfg, id) { return (cfg.recurring || []).find(t => t.id === id); }
+  function isScheduled(cfg, id, key) {
+    const t = taskById(cfg, id);
+    return !!t && t.days.includes(weekdayOf(key));
+  }
+  function prevScheduled(cfg, id, key) {
+    let k = key;
+    for (let i = 0; i < 4000; i++) {
+      k = addDays(k, -1);
+      if (isScheduled(cfg, id, k)) return k;
+    }
+    return null;
+  }
+
+  // Streak over scheduled occurrences only. Today not-yet-done is a grace,
+  // not a break.
+  function taskStreak(cfg, id) {
+    const today = todayKey();
+    // most recent scheduled day on or before today
+    let cursor = today;
+    for (let i = 0; i < 4000 && !isScheduled(cfg, id, cursor); i++) cursor = addDays(cursor, -1);
+    if (!isScheduled(cfg, id, cursor)) return 0;
+    // if that day is today and not done yet, don't count it against the streak
+    if (cursor === today && !dayTaskDone(cursor, id)) cursor = prevScheduled(cfg, id, cursor);
+
+    let n = 0;
+    for (let i = 0; i < 4000 && cursor && dayTaskDone(cursor, id); i++) {
+      n++; cursor = prevScheduled(cfg, id, cursor);
+    }
+    return n;
+  }
+
+  function taskTotal(id) {
+    return store.allDayKeys().reduce((sum, k) => sum + (dayTaskDone(k, id) ? 1 : 0), 0);
+  }
+
+  // For as-needed tasks: the most recent day STRICTLY BEFORE `beforeKey` the
+  // task was done (so we can say "last watered N days ago"). null if never.
+  function lastTaskDoneBefore(id, beforeKey) {
+    let best = null;
+    store.allDayKeys().forEach(k => {
+      if (k < beforeKey && dayTaskDone(k, id) && (best === null || k > best)) best = k;
+    });
+    return best;
+  }
+
+  /* ---------- weekly-limit habit (Drinking) ---------- */
+  function logDrink(key, fields) {
+    return store.updateDay(key, rec => {
+      rec.habits["drinking"] = { done: true, at: Date.now(), log: fields || {} };
+    });
+  }
+  function clearDrink(key) {
+    return store.updateDay(key, rec => { delete rec.habits["drinking"]; });
+  }
+  function drinkLog(key) {
+    const h = store.getDay(key).habits["drinking"];
+    return h && h.done ? (h.log || {}) : null;
+  }
+  // How many drinking days fall in the week containing `key`.
+  function drinkDaysInWeek(cfg, key) {
+    const wk = weekKeyOf(key, cfg.weekStartDow);
+    let n = 0, days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(wk, i);
+      if (dayHabitDone(d, "drinking")) { n++; days.push(d); }
+    }
+    return { count: n, weekStart: wk, days };
+  }
+
+  /* ---------- meals ---------- */
+  function addMeal(key, meal) {
+    return store.updateDay(key, rec => {
+      rec.meals = rec.meals || [];
+      rec.meals.push({ at: meal.at || Date.now(), note: meal.note || "" });
+      rec.meals.sort((a, b) => a.at - b.at);
+    });
+  }
+  function removeMeal(key, at) {
+    return store.updateDay(key, rec => {
+      rec.meals = (rec.meals || []).filter(m => m.at !== at);
+    });
+  }
+
+  return {
+    dayHabitDone, dayTaskDone,
+    toggleHabit, habitStreak, habitTotal,
+    toggleTask, isScheduled, taskStreak, taskTotal, taskById, lastTaskDoneBefore,
+    logDrink, clearDrink, drinkLog, drinkDaysInWeek,
+    addMeal, removeMeal,
+  };
+})();

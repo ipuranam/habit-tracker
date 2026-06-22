@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f6d7a" />
+  <title>Habit & Health Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- PWA: installable + offline -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Tracker" />
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <h1 class="app-title">Tracker</h1>
+      <p class="app-date" id="header-date"></p>
+    </header>
+
+    <main id="view" class="view">
+      <!-- Screens render here -->
+    </main>
+
+    <nav class="tabbar" id="tabbar">
+      <!-- Tab buttons render here -->
+    </nav>
+  </div>
+
+  <!-- Load order matters: helpers -> config -> store -> app -->
+  <script src="js/util.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/fasting.js"></script>
+  <script src="js/tracking.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- Register the service worker (skips gracefully on file:// or older browsers) -->
+  <script>
+    if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(err => console.warn("SW registration failed:", err));
+      });
+    }
+  </script>
+</body>
+</html>
