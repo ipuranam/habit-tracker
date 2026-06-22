@@ -314,6 +314,27 @@ html, body {
 .cal-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
 .cal-foot-hint { font-size: 0.74rem; }
 
+/* ---- Daily note ---- */
+.note-area {
+  width: 100%; min-height: 90px; resize: vertical; font-family: inherit;
+  font-size: 0.95rem; line-height: 1.4; padding: 10px; border-radius: 9px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+.note-area:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+/* ---- Metrics ---- */
+.metric-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.metric-row:last-child { border-bottom: none; }
+.metric-name { flex: 1; font-weight: 500; }
+.metric-input { display: inline-flex; align-items: center; gap: 6px; }
+.metric-input input { width: 92px; text-align: right; }
+.metric-hint { width: 100%; font-size: 0.76rem; }
+.metric-trend { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.spark { width: 150px; height: 38px; flex: 0 0 auto; }
+
+/* ---- Due task badge ---- */
+.checkrow-time.is-due { color: var(--warn); font-weight: 600; }
+
 /* ---- Stats screen ---- */
 .statitem { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .statitem:last-child { border-bottom: none; }

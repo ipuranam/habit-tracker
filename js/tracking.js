@@ -202,6 +202,46 @@ HT.tracking = (function () {
     return n ? sum / n : null;
   }
 
+  /* ---------- daily note ---------- */
+  function getNote(key) { return store.getDay(key).note || ""; }
+  function setNote(key, text) {
+    return store.updateDay(key, rec => {
+      if (text && text.trim()) rec.note = text;
+      else delete rec.note;
+    });
+  }
+
+  /* ---------- numeric metrics (weight, etc.) ---------- */
+  function getMetric(key, id) {
+    const m = store.getDay(key).metrics;
+    return m && m[id] != null ? m[id] : null;
+  }
+  function setMetric(key, id, value) {
+    return store.updateDay(key, rec => {
+      rec.metrics = rec.metrics || {};
+      if (value == null || value === "" || isNaN(value)) delete rec.metrics[id];
+      else rec.metrics[id] = Number(value);
+      if (!Object.keys(rec.metrics).length) delete rec.metrics;
+    });
+  }
+  // Logged points over the last `days` days, oldest → newest (for a trend line).
+  function metricSeries(id, days) {
+    const today = todayKey();
+    const out = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const k = addDays(today, -i);
+      const v = getMetric(k, id);
+      if (v != null) out.push({ key: k, value: v });
+    }
+    return out;
+  }
+  // Most recent logged value (scans all stored days), or null.
+  function metricLatest(id) {
+    const keys = store.allDayKeys(); // newest first
+    for (const k of keys) { const v = getMetric(k, id); if (v != null) return { key: k, value: v }; }
+    return null;
+  }
+
   return {
     dayHabitDone, dayTaskDone,
     toggleHabit, habitStreak, habitTotal, habitDoneLastDays,
@@ -211,5 +251,7 @@ HT.tracking = (function () {
     addMeal, removeMeal,
     getSleep, setSleep, clearSleep, sleepDurationMin, avgSleepMin,
     getRating, setRating, avgRating,
+    getNote, setNote,
+    getMetric, setMetric, metricSeries, metricLatest,
   };
 })();

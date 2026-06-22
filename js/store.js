@@ -68,6 +68,12 @@ HT.store = (function () {
       cfg.version = 2;
       changed = true;
     }
+    if (cfg.version < 3) {
+      if (!cfg.metrics) cfg.metrics = [{ id: "weight", name: "Weight", unit: "lb" }];
+      if (cfg.remindersEnabled === undefined) cfg.remindersEnabled = false;
+      cfg.version = 3;
+      changed = true;
+    }
     if (changed) write(K_CONFIG, cfg);
     return cfg;
   }
@@ -121,10 +127,21 @@ HT.store = (function () {
     return out;
   }
 
+  // Restore from an exported backup. Replaces everything. Throws on bad input.
+  function importAll(data) {
+    if (!data || typeof data !== "object" || (!data.config && !data.days)) {
+      throw new Error("This doesn't look like a tracker backup file.");
+    }
+    Object.keys(localStorage).filter(k => k.startsWith("ht.")).forEach(k => localStorage.removeItem(k));
+    if (data.config) write(K_CONFIG, data.config);
+    if (data.fasts) write(K_FASTS, data.fasts);
+    if (data.days) Object.keys(data.days).forEach(k => write(K_DAY + k, data.days[k]));
+  }
+
   return {
     getConfig, saveConfig,
     getDay, saveDay, updateDay, allDayKeys, emptyDay,
     getFasts, saveFasts,
-    exportAll,
+    exportAll, importAll,
   };
 })();

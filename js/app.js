@@ -85,6 +85,15 @@
 
   function taskRow(t, key) {
     const done = tracking.dayTaskDone(key, t.id);
+    // "Due" flag: today only, a timed task whose time has passed and isn't done.
+    let due = false;
+    if (key === util.todayKey() && t.time && !isAsNeeded(t) && !done) {
+      const now = new Date();
+      due = (now.getHours() * 60 + now.getMinutes()) >= util.hmToMinutes(t.time);
+    }
+    const timeHtml = t.time
+      ? `<span class="checkrow-time ${due ? "is-due" : ""}">${util.minutesToLabel(util.hmToMinutes(t.time))}${due ? " · due" : ""}</span>`
+      : "";
     let badge;
     if (isAsNeeded(t)) {
       // "last done" info instead of a streak.
@@ -103,7 +112,7 @@
         <input type="checkbox" ${done ? "checked" : ""} data-action="toggle-task" data-id="${t.id}" data-key="${key}">
         <span class="checkrow-main">
           <span class="checkrow-name ${done ? "is-done" : ""}">${esc(t.name)}</span>
-          ${t.time ? `<span class="checkrow-time">${util.minutesToLabel(util.hmToMinutes(t.time))}</span>` : ""}
+          ${timeHtml}
         </span>
         ${badge}
       </label>`;
@@ -217,6 +226,37 @@
     return `<div class="card center"><h2>How was today?</h2><div class="rate-row">${dots}</div>${lbl}</div>`;
   }
 
+  function metricsCard(key) {
+    const metrics = cfg.metrics || [];
+    if (!metrics.length) return "";
+    const rows = metrics.map(m => {
+      const v = tracking.getMetric(key, m.id);
+      const latest = tracking.metricLatest(m.id);
+      const hint = (v == null && latest) ? `last: ${latest.value} ${esc(m.unit || "")}` : "";
+      return `
+        <div class="metric-row">
+          <label class="metric-name">${esc(m.name)}</label>
+          <span class="metric-input">
+            <input type="number" inputmode="decimal" step="any" data-action="save-metric"
+                   data-id="${m.id}" data-key="${key}" value="${v == null ? "" : v}" placeholder="—">
+            <span class="metric-unit muted">${esc(m.unit || "")}</span>
+          </span>
+          ${hint ? `<span class="metric-hint muted">${hint}</span>` : ""}
+        </div>`;
+    }).join("");
+    return `<div class="card"><h2>📏 Metrics</h2>${rows}</div>`;
+  }
+
+  function noteCard(key) {
+    const note = tracking.getNote(key);
+    return `
+      <div class="card">
+        <h2>📝 Note</h2>
+        <textarea class="note-area" data-action="save-note" data-key="${key}"
+                  placeholder="Anything about today…">${esc(note)}</textarea>
+      </div>`;
+  }
+
   /* ============================================================
      Today screen
      ============================================================ */
@@ -228,7 +268,9 @@
       + drinkingCard(key)
       + mealsCard(key)
       + sleepCard(key)
-      + ratingCard(key);
+      + metricsCard(key)
+      + ratingCard(key)
+      + noteCard(key);
   }
 
   function fastingCard() {
@@ -338,7 +380,9 @@
       + drinkingCard(key)
       + mealsCard(key)
       + sleepCard(key)
+      + metricsCard(key)
       + ratingCard(key)
+      + noteCard(key)
       + fastHistoryCard();
   }
 
@@ -348,7 +392,8 @@
     const r = store.getDay(key);
     return (r.habits && Object.keys(r.habits).length) ||
            (r.recurring && Object.keys(r.recurring).length) ||
-           (r.meals && r.meals.length) || r.sleep || r.rating;
+           (r.meals && r.meals.length) || r.sleep || r.rating || r.note ||
+           (r.metrics && Object.keys(r.metrics).length);
   }
 
   function calCell(key) {
@@ -447,7 +492,44 @@
   }
 
   function renderStats() {
-    return dailyStatsCard() + taskStatsCard() + reflectionStatsCard();
+    return dailyStatsCard() + taskStatsCard() + metricsStatsCard() + reflectionStatsCard();
+  }
+
+  // Simple inline SVG trend line from logged metric points.
+  function sparkline(points) {
+    if (points.length < 2) return '<span class="muted" style="font-size:.8rem">log 2+ days for a trend</span>';
+    const w = 150, h = 38, pad = 3;
+    const vals = points.map(p => p.value);
+    const min = Math.min(...vals), max = Math.max(...vals), range = (max - min) || 1;
+    const step = (w - 2 * pad) / (points.length - 1);
+    const coords = points.map((p, i) =>
+      `${(pad + i * step).toFixed(1)},${(h - pad - ((p.value - min) / range) * (h - 2 * pad)).toFixed(1)}`);
+    return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        <polyline points="${coords.join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      </svg>`;
+  }
+
+  function metricsStatsCard() {
+    const metrics = cfg.metrics || [];
+    if (!metrics.length) return "";
+    const items = metrics.map(m => {
+      const series = tracking.metricSeries(m.id, 30);
+      const latest = tracking.metricLatest(m.id);
+      let change = "";
+      if (series.length >= 2) {
+        const d = series[series.length - 1].value - series[0].value;
+        change = `<span class="muted" style="font-size:.78rem">${d > 0 ? "+" : ""}${(+d.toFixed(1))} over ${series.length} logs</span>`;
+      }
+      return `
+        <div class="statitem">
+          <div class="statitem-head">
+            <span>${esc(m.name)}</span>
+            <span class="muted">${latest ? latest.value + " " + esc(m.unit || "") : "—"}</span>
+          </div>
+          <div class="metric-trend">${sparkline(series)}${change}</div>
+        </div>`;
+    }).join("");
+    return `<div class="card"><h2>Metrics (last 30 days)</h2>${items}</div>`;
   }
 
   function dailyStatsCard() {
@@ -518,7 +600,49 @@
      Settings screen — editable, data-driven config
      ============================================================ */
   function renderSettings() {
-    return dailyHabitsEditor() + recurringEditor() + scheduleEditor() + drinkingLimitEditor() + anchorsEditor() + dataCard();
+    return dailyHabitsEditor() + recurringEditor() + metricsEditor() + scheduleEditor()
+      + drinkingLimitEditor() + remindersEditor() + anchorsEditor() + dataCard();
+  }
+
+  function metricsEditor() {
+    const rows = (cfg.metrics || []).map(m =>
+      `<div class="edit-row">
+         <div class="edit-row-main">${esc(m.name)} <span class="muted">(${esc(m.unit || "")})</span></div>
+         <button class="iconbtn" data-action="delete-metric" data-id="${m.id}" title="Delete">🗑</button>
+       </div>`).join("");
+    const form = `
+      <form class="taskform" data-action="create-metric">
+        <div class="form-line" style="gap:8px">
+          <input name="name" placeholder="Metric name (e.g. Weight)" autocomplete="off" required style="flex:1">
+          <input name="unit" placeholder="unit" autocomplete="off" style="width:84px">
+        </div>
+        <div class="form-actions"><button class="btn btn-accent" type="submit">+ Add metric</button></div>
+      </form>`;
+    return `<div class="card"><h2>Metrics</h2>${rows || '<p class="muted">None.</p>'}${form}</div>`;
+  }
+
+  function remindersEditor() {
+    const supported = typeof Notification !== "undefined";
+    const perm = supported ? Notification.permission : "unsupported";
+    let status;
+    if (!supported) status = "Notifications aren’t supported in this browser.";
+    else if (perm === "denied") status = "Blocked. Enable notifications for this site in your browser settings, then try again.";
+    else if (perm === "granted") status = cfg.remindersEnabled
+      ? "On — you’ll get a nudge for timed tasks while the app is open."
+      : "Allowed. Turn on below.";
+    else status = "Allow notifications to get nudges for your timed tasks.";
+    const on = cfg.remindersEnabled && perm === "granted";
+    const btn = on
+      ? `<button class="btn" data-action="reminders-off">Turn off</button>`
+      : (supported && perm !== "denied"
+          ? `<button class="btn btn-accent" data-action="reminders-on">Enable reminders</button>` : "");
+    return `
+      <div class="card">
+        <h2>Reminders</h2>
+        <p class="muted" style="font-size:.84rem;margin-top:0">${status}</p>
+        ${btn}
+        <p class="muted" style="font-size:.76rem;margin-bottom:0">Heads up: these fire only while the app is open. Reliable alarms when the app is closed need a server (which this offline app doesn’t use) and aren’t dependable on iPhone — for hard alarms, also set one in your phone’s Reminders/Clock app.</p>
+      </div>`;
   }
 
   function dailyHabitsEditor() {
@@ -646,9 +770,12 @@
         <h2>Data</h2>
         <div class="form-actions">
           <button class="btn" data-action="export">Export backup (.json)</button>
+          <label class="btn">Import backup
+            <input type="file" accept="application/json,.json" data-action="import-file" hidden>
+          </label>
           <button class="btn" data-action="reset">Reset everything</button>
         </div>
-        <p class="muted" style="font-size:.8rem">Everything is stored only in this browser. Export makes a backup file.</p>
+        <p class="muted" style="font-size:.8rem">Everything is stored only in this browser. Export makes a backup file; Import restores one (replacing current data) — also how you’d move data to another device for now.</p>
       </div>`;
   }
 
@@ -697,6 +824,14 @@
       case "save-schedule": saveSchedule(); break;
       case "export": exportData(); break;
       case "reset":  resetAll(); break;
+
+      case "delete-metric":
+        if (confirm("Delete this metric? Its logged values stay in storage but it stops appearing.")) {
+          cfg.metrics = (cfg.metrics || []).filter(m => m.id !== id); saveCfg(); render();
+        }
+        break;
+      case "reminders-on":  enableReminders(); break;
+      case "reminders-off": cfg.remindersEnabled = false; saveCfg(); render(); break;
     }
   }
 
@@ -718,6 +853,20 @@
       // Live-hide the day picker when a task is marked as-needed.
       const wrap = e.target.closest("form").querySelector(".days-wrap");
       if (wrap) wrap.style.display = e.target.checked ? "none" : "";
+      return;
+    }
+    const act = el.dataset.action;
+    if (act === "save-note") {
+      // Save quietly on blur — NO re-render, or the textarea would lose focus.
+      tracking.setNote(el.dataset.key, e.target.value);
+      return;
+    }
+    if (act === "save-metric") {
+      tracking.setMetric(el.dataset.key, el.dataset.id, e.target.value); render(); return;
+    }
+    if (act === "import-file") {
+      const file = e.target.files && e.target.files[0];
+      if (file) importFromFile(file);
       return;
     }
     if (el.dataset.action === "toggle-task") {
@@ -754,6 +903,12 @@
       const name = (data.name || "").trim();
       if (!name) return;
       cfg.habits.push({ id: "habit-" + Date.now().toString(36), name, icon: (data.icon || "").trim(), type: "daily-check" });
+      saveCfg(); render();
+    } else if (a === "create-metric") {
+      const name = (data.name || "").trim();
+      if (!name) return;
+      cfg.metrics = cfg.metrics || [];
+      cfg.metrics.push({ id: "metric-" + Date.now().toString(36), name, unit: (data.unit || "").trim() });
       saveCfg(); render();
     }
   }
@@ -820,6 +975,56 @@
     URL.revokeObjectURL(url);
   }
 
+  function enableReminders() {
+    if (typeof Notification === "undefined") { flash("Notifications not supported"); return; }
+    Notification.requestPermission().then(p => {
+      cfg.remindersEnabled = (p === "granted");
+      saveCfg();
+      if (p === "granted") { flash("Reminders on"); checkReminders(); }
+      render();
+    });
+  }
+
+  function importFromFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let data;
+      try { data = JSON.parse(reader.result); }
+      catch (e) { alert("Couldn't read that file — it isn't valid JSON."); return; }
+      if (!confirm("Replace ALL current data in this browser with this backup?")) return;
+      try {
+        store.importAll(data);
+        cfg = store.getConfig();
+        state.histDate = util.todayKey();
+        rerender();
+        flash("Backup imported");
+      } catch (e) { alert("Import failed: " + e.message); }
+    };
+    reader.readAsText(file);
+  }
+
+  // Foreground-only reminders: while the app is open, nudge once when a timed
+  // task's time has arrived and it's still unchecked. (Background alarms aren't
+  // possible in a serverless PWA — documented in Settings.)
+  function checkReminders() {
+    if (!cfg.remindersEnabled || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const today = util.todayKey();
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const dow = util.weekdayOf(today);
+    cfg.recurring.forEach(t => {
+      if (isAsNeeded(t) || !t.time || !t.days.includes(dow)) return;
+      const tm = util.hmToMinutes(t.time);
+      if (nowMin >= tm && nowMin < tm + 60 && !tracking.dayTaskDone(today, t.id)) {
+        const flag = "ht.notified." + today + "." + t.id;
+        if (!localStorage.getItem(flag)) {
+          localStorage.setItem(flag, "1");
+          try { new Notification("Reminder: " + t.name, { body: "Scheduled for " + util.minutesToLabel(tm), tag: flag }); } catch (e) {}
+        }
+      }
+    });
+  }
+
   function resetAll() {
     if (!confirm("This erases ALL tracked data and settings in this browser. Continue?")) return;
     Object.keys(localStorage).filter(k => k.startsWith("ht.")).forEach(k => localStorage.removeItem(k));
@@ -850,6 +1055,8 @@
     renderTabbar();
     render();
     setInterval(updateFastingLive, 1000);
+    checkReminders();
+    setInterval(checkReminders, 60000); // re-check timed tasks each minute while open
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

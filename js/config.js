@@ -17,8 +17,9 @@
 window.HT = window.HT || {};
 
 HT.DEFAULT_CONFIG = {
-  version: 2,
+  version: 3,
   weekStartDow: 1, // Monday — resets weekly drinking count & weekly views
+  remindersEnabled: false, // in-app reminders while the app is open (see note in Settings)
 
   // Eating windows per weekday. Each day is a list of {start,end} windows
   // (a list so a day could have more than one window later). Anything
@@ -64,5 +65,11 @@ HT.DEFAULT_CONFIG = {
   // Fixed anchors: shown on the daily timeline for context, not tracked.
   anchors: [
     { id: "work", name: "Work", days: [1,2,3,4,5], start: "09:00", end: "18:30" },
+  ],
+
+  // Numeric metrics logged over time (weight, etc.). Each: id, name, unit.
+  // Add/remove your own in Settings. Shown with a trend line on the Stats tab.
+  metrics: [
+    { id: "weight", name: "Weight", unit: "lb" },
   ],
 };
