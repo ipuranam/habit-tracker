@@ -16,6 +16,7 @@ HT.store = (function () {
   const K_CONFIG = "ht.config";
   const K_DAY    = "ht.day.";     // + dateKey
   const K_FASTS  = "ht.fasts";
+  const K_WORK   = "ht.worktodos"; // ad-hoc work to-do list (day/week scoped)
 
   function read(key, fallback) {
     try {
@@ -120,9 +121,13 @@ HT.store = (function () {
   function getFasts() { return read(K_FASTS, []); }
   function saveFasts(list) { write(K_FASTS, list); }
 
+  /* ---- Work to-dos (live list, not date-bound) ---- */
+  function getWorkTodos() { return read(K_WORK, []); }
+  function saveWorkTodos(list) { write(K_WORK, list); }
+
   /* ---- Export / import (groundwork for future sync/backup) ---- */
   function exportAll() {
-    const out = { config: getConfig(), fasts: getFasts(), days: {} };
+    const out = { config: getConfig(), fasts: getFasts(), worktodos: getWorkTodos(), days: {} };
     allDayKeys().forEach(k => { out.days[k] = getDay(k); });
     return out;
   }
@@ -135,6 +140,7 @@ HT.store = (function () {
     Object.keys(localStorage).filter(k => k.startsWith("ht.")).forEach(k => localStorage.removeItem(k));
     if (data.config) write(K_CONFIG, data.config);
     if (data.fasts) write(K_FASTS, data.fasts);
+    if (data.worktodos) write(K_WORK, data.worktodos);
     if (data.days) Object.keys(data.days).forEach(k => write(K_DAY + k, data.days[k]));
   }
 
@@ -142,6 +148,7 @@ HT.store = (function () {
     getConfig, saveConfig,
     getDay, saveDay, updateDay, allDayKeys, emptyDay,
     getFasts, saveFasts,
+    getWorkTodos, saveWorkTodos,
     exportAll, importAll,
   };
 })();

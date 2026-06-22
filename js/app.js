@@ -19,6 +19,7 @@
 
   const TABS = [
     { id: "today",    icon: "📅", label: "Today" },
+    { id: "work",     icon: "💼", label: "Work" },
     { id: "history",  icon: "🗓️", label: "Calendar" },
     { id: "stats",    icon: "📊", label: "Stats" },
     { id: "settings", icon: "⚙️", label: "Settings" },
@@ -52,6 +53,7 @@
   function render() {
     const view = document.getElementById("view");
     if (state.tab === "today")        view.innerHTML = renderToday();
+    else if (state.tab === "work")    view.innerHTML = renderWork();
     else if (state.tab === "history") view.innerHTML = renderHistory();
     else if (state.tab === "stats")   view.innerHTML = renderStats();
     else                              view.innerHTML = renderSettings();
@@ -257,6 +259,46 @@
       </div>`;
   }
 
+  /* ---------- Work to-dos (shared by Today card and Work tab) ---------- */
+  function workList(scope) {
+    const items = tracking.visibleWork(scope, cfg.weekStartDow);
+    const rows = items.map(t => `
+      <label class="checkrow">
+        <input type="checkbox" ${t.done ? "checked" : ""} data-action="toggle-work" data-id="${t.id}">
+        <span class="checkrow-main"><span class="checkrow-name ${t.done ? "is-done" : ""}">${esc(t.text)}</span></span>
+        <button class="iconbtn" data-action="remove-work" data-id="${t.id}" title="Delete">✕</button>
+      </label>`).join("") || `<p class="muted" style="margin:6px 0 0">Nothing here yet.</p>`;
+    const form = `
+      <form class="work-add" data-action="add-work" data-scope="${scope}">
+        <input name="text" placeholder="${scope === "day" ? "Add a task for today…" : "Add a task for this week…"}" autocomplete="off" required>
+        <button class="btn btn-accent" type="submit">Add</button>
+      </form>`;
+    return rows + form;
+  }
+  function openBadge(scope) {
+    const n = tracking.openWorkCount(scope, cfg.weekStartDow);
+    return n ? ` <span class="muted" style="font-size:.8rem;font-weight:400">${n} to do</span>` : "";
+  }
+
+  // Compact summary card shown on the Today screen.
+  function workTodayCard() {
+    const wkOpen = tracking.openWorkCount("week", cfg.weekStartDow);
+    return `
+      <div class="card">
+        <h2>💼 Work today${openBadge("day")}</h2>
+        ${workList("day")}
+        <button class="linkbtn" data-action="go" data-tab="work" style="margin-top:12px">
+          This week: ${wkOpen} open · open Work tab →
+        </button>
+      </div>`;
+  }
+
+  /* ---------- Work tab ---------- */
+  function renderWork() {
+    return `<div class="card"><h2>Today${openBadge("day")}</h2>${workList("day")}</div>`
+      + `<div class="card"><h2>This week${openBadge("week")}</h2>${workList("week")}</div>`;
+  }
+
   /* ============================================================
      Today screen
      ============================================================ */
@@ -265,6 +307,7 @@
     return fastingCard() + timelineCard()
       + dailyCard(key)
       + tasksCard(key, true)
+      + workTodayCard()
       + drinkingCard(key)
       + mealsCard(key)
       + sleepCard(key)
@@ -846,6 +889,7 @@
       case "remove-meal":  tracking.removeMeal(key, Number(el.dataset.at)); render(); break;
       case "set-rating":   tracking.setRating(key, Number(el.dataset.val)); render(); break;
       case "clear-sleep":  tracking.clearSleep(key); render(); break;
+      case "remove-work":  tracking.removeWorkTodo(id); render(); break;
 
       case "hist-prev":  state.histDate = util.addDays(state.histDate, -1); state.calAnchor = state.histDate; render(); break;
       case "hist-next":  state.histDate = util.addDays(state.histDate, 1);  state.calAnchor = state.histDate; render(); break;
@@ -916,6 +960,8 @@
       tracking.toggleTask(el.dataset.key, el.dataset.id); render();
     } else if (el.dataset.action === "toggle-habit") {
       tracking.toggleHabit(el.dataset.key, el.dataset.id); render();
+    } else if (el.dataset.action === "toggle-work") {
+      tracking.toggleWorkTodo(el.dataset.id); render();
     } else if (el.dataset.action === "save-limit") {
       const h = cfg.habits.find(x => x.type === "weekly-limit");
       h.limitPerWeek = Math.max(0, Math.min(7, Number(el.value) || 0)); saveCfg();
@@ -953,6 +999,11 @@
       cfg.metrics = cfg.metrics || [];
       cfg.metrics.push({ id: "metric-" + Date.now().toString(36), name, unit: (data.unit || "").trim() });
       saveCfg(); render();
+    } else if (a === "add-work") {
+      const text = (data.text || "").trim();
+      if (!text) return;
+      tracking.addWorkTodo(form.dataset.scope, text);
+      render();
     }
   }
 

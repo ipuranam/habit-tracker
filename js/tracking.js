@@ -10,7 +10,7 @@
 window.HT = window.HT || {};
 
 HT.tracking = (function () {
-  const { todayKey, addDays, weekdayOf, weekKeyOf } = HT.util;
+  const { todayKey, addDays, weekdayOf, weekKeyOf, dateKey } = HT.util;
   const store = HT.store;
 
   /* ---------- small lookups ---------- */
@@ -242,8 +242,48 @@ HT.tracking = (function () {
     return null;
   }
 
+  /* ---------- work to-dos (ad-hoc, scope: "day" | "week") ----------
+     Carry-over model: an unfinished item always shows in its list; a finished
+     one shows only during the period it was completed in (today / this week),
+     so completed items drop off afterward but open ones never get lost. */
+  function addWorkTodo(scope, text) {
+    const list = store.getWorkTodos();
+    list.push({
+      id: "w-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36),
+      text: (text || "").trim(), scope, done: false, created: Date.now(), doneAt: null,
+    });
+    store.saveWorkTodos(list);
+  }
+  function toggleWorkTodo(id) {
+    const list = store.getWorkTodos();
+    const t = list.find(x => x.id === id);
+    if (!t) return;
+    t.done = !t.done; t.doneAt = t.done ? Date.now() : null;
+    store.saveWorkTodos(list);
+  }
+  function removeWorkTodo(id) {
+    store.saveWorkTodos(store.getWorkTodos().filter(x => x.id !== id));
+  }
+  function visibleWork(scope, weekStartDow) {
+    const today = todayKey();
+    const wk = weekKeyOf(today, weekStartDow);
+    return store.getWorkTodos()
+      .filter(t => t.scope === scope)
+      .filter(t => {
+        if (!t.done || !t.doneAt) return true;          // open items always show
+        const dk = dateKey(new Date(t.doneAt));
+        return scope === "day" ? dk === today : weekKeyOf(dk, weekStartDow) === wk;
+      })
+      .sort((a, b) => (a.done !== b.done) ? (a.done ? 1 : -1)   // open first
+        : (a.done ? b.doneAt - a.doneAt : a.created - b.created));
+  }
+  function openWorkCount(scope, weekStartDow) {
+    return visibleWork(scope, weekStartDow).filter(t => !t.done).length;
+  }
+
   return {
     dayHabitDone, dayTaskDone,
+    addWorkTodo, toggleWorkTodo, removeWorkTodo, visibleWork, openWorkCount,
     toggleHabit, habitStreak, habitTotal, habitDoneLastDays,
     toggleTask, isScheduled, taskStreak, taskTotal, taskById, lastTaskDoneBefore,
     taskRateLastDays, taskDoneLastDays,

@@ -115,11 +115,12 @@ html, body {
 }
 .tabbar button {
   flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   color: var(--text-soft);
-  padding: 10px 4px;
-  font-size: 0.72rem;
+  padding: 10px 2px;
+  font-size: 0.68rem;
   font-family: inherit;
   cursor: pointer;
   display: flex;
@@ -256,6 +257,10 @@ html, body {
 .meal-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .meal-form .meal-timein { width: 110px; }
 .meal-form input[name=note] { flex: 1; min-width: 140px; }
+
+/* ---- Work to-do add form ---- */
+.work-add { display: flex; gap: 8px; margin-top: 10px; }
+.work-add input { flex: 1; min-width: 0; }
 
 /* ---- As-needed task subheader ---- */
 .checkrow-sub {

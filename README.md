@@ -16,6 +16,8 @@ no framework, no build step. All data is stored locally in the browser
   Fasted, …) with streaks; add your own.
 - **Recurring tasks** — repeat on chosen days with optional times and streaks, or
   mark a task **as-needed** (no fixed days, no streak — e.g. watering plants).
+- **Work tasks** — ad-hoc Today / This-Week to-do lists; unfinished items carry
+  over until done. A summary card on Today plus a full Work tab.
 - **Calendar** — month/week views, colored by day rating; tap any day (past *or
   future*) to see and edit its full detail.
 - **Stats** — per-habit/task streaks, totals, and 7-/30-day completion %, plus a
