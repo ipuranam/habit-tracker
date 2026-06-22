@@ -12,12 +12,23 @@ no framework, no build step. All data is stored locally in the browser
 - **No smoking** — one tap per day; tracks current streak and lifetime total.
 - **Drinking** — a weekly limit (e.g. 1 day/week) with an over-limit flag; log what
   and how much.
+- **Daily habits** — a check-once-a-day list (No smoking, Workout, Eat healthy,
+  Fasted, …) with streaks; add your own.
 - **Recurring tasks** — repeat on chosen days with optional times and streaks, or
   mark a task **as-needed** (no fixed days, no streak — e.g. watering plants).
-- **Calendar** — month/week views; tap any day to see and edit its full detail.
-- **Meals** — log meals with a time and optional note.
-- **Fully editable** — add/edit/remove your own habits, tasks, eating schedule, and
-  day anchors from the Settings screen. Everything is data-driven.
+- **Calendar** — month/week views, colored by day rating; tap any day (past *or
+  future*) to see and edit its full detail.
+- **Stats** — per-habit/task streaks, totals, and 7-/30-day completion %, plus a
+  weight/metric trend line and average sleep & day-rating.
+- **Sleep & day rating** — log bed/wake times (with a 7-day average) and a 1–5
+  quality-of-day rating.
+- **Metrics** — log weight (or any number you define) over time with a trend.
+- **Meals** — log meals with a time and optional note; plus a free-text daily note.
+- **Reminders** — optional in-app nudges for timed tasks (foreground only; see
+  in-app note about background/iOS limits).
+- **Backup** — export and import your data as a JSON file.
+- **Fully editable** — add/edit/remove your own habits, tasks, metrics, eating
+  schedule, and day anchors from Settings. Everything is data-driven.
 
 ## Run locally
 
