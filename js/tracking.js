@@ -135,11 +135,53 @@ HT.tracking = (function () {
     });
   }
 
+  /* ---------- sleep ---------- */
+  // A night's sleep is stored on the day you WOKE UP, as {bed, wake} timestamps.
+  function getSleep(key) { return store.getDay(key).sleep || null; }
+  function setSleep(key, bed, wake) {
+    return store.updateDay(key, rec => { rec.sleep = { bed, wake }; });
+  }
+  function clearSleep(key) {
+    return store.updateDay(key, rec => { delete rec.sleep; });
+  }
+  function sleepDurationMin(key) {
+    const s = getSleep(key);
+    return s ? (s.wake - s.bed) / 60000 : null;
+  }
+  // Average sleep over the `days` days ending at (and including) `key`.
+  function avgSleepMin(key, days) {
+    let sum = 0, n = 0;
+    for (let i = 0; i < days; i++) {
+      const m = sleepDurationMin(addDays(key, -i));
+      if (m != null && m > 0) { sum += m; n++; }
+    }
+    return n ? sum / n : null;
+  }
+
+  /* ---------- quality-of-day rating (1–5) ---------- */
+  function getRating(key) { return store.getDay(key).rating || null; }
+  function setRating(key, n) {
+    return store.updateDay(key, rec => {
+      if (rec.rating === n) delete rec.rating; // tapping the same value clears it
+      else rec.rating = n;
+    });
+  }
+  function avgRating(key, days) {
+    let sum = 0, n = 0;
+    for (let i = 0; i < days; i++) {
+      const r = getRating(addDays(key, -i));
+      if (r) { sum += r; n++; }
+    }
+    return n ? sum / n : null;
+  }
+
   return {
     dayHabitDone, dayTaskDone,
     toggleHabit, habitStreak, habitTotal,
     toggleTask, isScheduled, taskStreak, taskTotal, taskById, lastTaskDoneBefore,
     logDrink, clearDrink, drinkLog, drinkDaysInWeek,
     addMeal, removeMeal,
+    getSleep, setSleep, clearSleep, sleepDurationMin, avgSleepMin,
+    getRating, setRating, avgRating,
   };
 })();

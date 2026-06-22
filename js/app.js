@@ -178,6 +178,40 @@
       </div>`;
   }
 
+  function sleepCard(key) {
+    const s = tracking.getSleep(key);
+    const avg = tracking.avgSleepMin(key, 7);
+    let body;
+    if (s) {
+      body = `
+        <div class="sleep-logged">
+          <div class="sleep-dur">${util.humanDuration(tracking.sleepDurationMin(key))}</div>
+          <div class="muted">${labelTime(new Date(s.bed))} → ${labelTime(new Date(s.wake))}</div>
+          <button class="btn" data-action="clear-sleep" data-key="${key}">Edit / clear</button>
+        </div>`;
+    } else {
+      body = `
+        <form data-action="save-sleep" data-key="${key}" class="sleep-form">
+          <label class="sleep-field"><span class="muted">Bedtime</span><input type="time" name="bed" value="23:00"></label>
+          <label class="sleep-field"><span class="muted">Wake</span><input type="time" name="wake" value="07:00"></label>
+          <button class="btn btn-accent" type="submit">Log sleep</button>
+        </form>`;
+    }
+    const avgLine = avg ? `<div class="muted" style="font-size:.8rem;margin-top:10px">7-day average: ${util.humanDuration(avg)}</div>` : "";
+    return `<div class="card"><h2>😴 Sleep</h2>${body}${avgLine}</div>`;
+  }
+
+  const RATING_LABELS = { 1: "Rough", 2: "Meh", 3: "Okay", 4: "Good", 5: "Great" };
+  function ratingCard(key) {
+    const r = tracking.getRating(key);
+    const dots = [1, 2, 3, 4, 5].map(n =>
+      `<button class="rate-dot r${n} ${r && n <= r ? "on" : ""} ${r === n ? "sel" : ""}"
+               data-action="set-rating" data-key="${key}" data-val="${n}">${n}</button>`).join("");
+    const lbl = r ? `<div class="rate-label">${RATING_LABELS[r]}</div>`
+                  : `<div class="rate-label muted">Tap to rate</div>`;
+    return `<div class="card center"><h2>How was today?</h2><div class="rate-row">${dots}</div>${lbl}</div>`;
+  }
+
   /* ============================================================
      Today screen
      ============================================================ */
@@ -187,7 +221,9 @@
       + noSmokingCard(key, true)
       + tasksCard(key, true)
       + drinkingCard(key)
-      + mealsCard(key);
+      + mealsCard(key)
+      + sleepCard(key)
+      + ratingCard(key);
   }
 
   function fastingCard() {
@@ -284,6 +320,8 @@
       + tasksCard(key, isToday)
       + drinkingCard(key)
       + mealsCard(key)
+      + sleepCard(key)
+      + ratingCard(key)
       + fastHistoryCard();
   }
 
@@ -293,7 +331,7 @@
     const r = store.getDay(key);
     return (r.habits && Object.keys(r.habits).length) ||
            (r.recurring && Object.keys(r.recurring).length) ||
-           (r.meals && r.meals.length);
+           (r.meals && r.meals.length) || r.sleep || r.rating;
   }
 
   function calCell(key) {
@@ -305,7 +343,13 @@
     if (key === state.histDate) cls.push("sel");
     const future = key > today;
     if (future) cls.push("future");
-    const dot = !future && hasActivity(key) ? '<span class="cal-dot"></span>' : "";
+    // Dot is colored by the day's rating (mood map); neutral if only other activity.
+    let dot = "";
+    if (!future) {
+      const r = tracking.getRating(key);
+      if (r) dot = `<span class="cal-dot r${r}"></span>`;
+      else if (hasActivity(key)) dot = `<span class="cal-dot"></span>`;
+    }
     return `<button class="${cls.join(" ")}" data-action="cal-day" data-key="${key}" ${future ? "disabled" : ""}>
         <span class="cal-num">${d.getDate()}</span>${dot}
       </button>`;
@@ -514,6 +558,8 @@
 
       case "clear-drink":  tracking.clearDrink(key); render(); break;
       case "remove-meal":  tracking.removeMeal(key, Number(el.dataset.at)); render(); break;
+      case "set-rating":   tracking.setRating(key, Number(el.dataset.val)); render(); break;
+      case "clear-sleep":  tracking.clearSleep(key); render(); break;
 
       case "hist-prev":  state.histDate = util.addDays(state.histDate, -1); state.calAnchor = state.histDate; render(); break;
       case "hist-next":
@@ -582,6 +628,10 @@
       const at = timeInputToTs(form.dataset.key, data.time);
       tracking.addMeal(form.dataset.key, { at, note: data.note || "" });
       render();
+    } else if (a === "save-sleep") {
+      const { bed, wake } = sleepTimesToTs(form.dataset.key, data.bed || "23:00", data.wake || "07:00");
+      tracking.setSleep(form.dataset.key, bed, wake);
+      render();
     } else if (a === "create-task" || a === "save-task") {
       saveTaskFromForm(form, a === "save-task" ? form.dataset.id : null);
     }
@@ -596,6 +646,18 @@
       return base.getTime();
     }
     return Date.now();
+  }
+
+  // Turn bedtime/wake "HH:MM" into timestamps for the night that ends on `key`.
+  // If bedtime is later in the clock than wake (e.g. 23:00 vs 07:00), bedtime
+  // belongs to the previous evening.
+  function sleepTimesToTs(key, bedHM, wakeHM) {
+    const [bh, bm] = bedHM.split(":").map(Number);
+    const [wh, wm] = wakeHM.split(":").map(Number);
+    const wake = util.keyToDate(key); wake.setHours(wh, wm, 0, 0);
+    const bed = util.keyToDate(key); bed.setHours(bh, bm, 0, 0);
+    if (util.hmToMinutes(bedHM) > util.hmToMinutes(wakeHM)) bed.setDate(bed.getDate() - 1);
+    return { bed: bed.getTime(), wake: wake.getTime() };
   }
 
   function saveTaskFromForm(form, existingId) {
