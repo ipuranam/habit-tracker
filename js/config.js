@@ -17,7 +17,7 @@
 window.HT = window.HT || {};
 
 HT.DEFAULT_CONFIG = {
-  version: 4,
+  version: 5,
   weekStartDow: 1, // Monday — resets weekly drinking count & weekly views
   remindersEnabled: false, // in-app reminders while the app is open (see note in Settings)
 
@@ -75,5 +75,6 @@ HT.DEFAULT_CONFIG = {
   // Add/remove your own in Settings. Shown with a trend line on the Stats tab.
   metrics: [
     { id: "weight", name: "Weight", unit: "lb" },
+    { id: "steps",  name: "Steps",  unit: "steps" },
   ],
 };

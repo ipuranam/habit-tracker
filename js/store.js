@@ -80,6 +80,12 @@ HT.store = (function () {
       cfg.version = 4;
       changed = true;
     }
+    if (cfg.version < 5) {
+      cfg.metrics = cfg.metrics || [];
+      if (!cfg.metrics.some(m => m.id === "steps")) cfg.metrics.push({ id: "steps", name: "Steps", unit: "steps" });
+      cfg.version = 5;
+      changed = true;
+    }
     if (changed) write(K_CONFIG, cfg);
     return cfg;
   }

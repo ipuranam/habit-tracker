@@ -18,10 +18,10 @@
   const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
   const TABS = [
+    { id: "home",     icon: "📊", label: "Home" },
     { id: "today",    icon: "📅", label: "Today" },
     { id: "work",     icon: "💼", label: "Work" },
     { id: "history",  icon: "🗓️", label: "Calendar" },
-    { id: "stats",    icon: "📊", label: "Stats" },
     { id: "settings", icon: "⚙️", label: "Settings" },
   ];
 
@@ -30,7 +30,7 @@
   function isDailyCheck(h) { return h.type === "daily-check" || h.type === "tap-streak"; }
 
   const state = {
-    tab: "today", histDate: util.todayKey(),
+    tab: "home", histDate: util.todayKey(),
     calMode: "month", calAnchor: util.todayKey(),  // calendar view state
     editTaskId: null, addingTask: false,
   };
@@ -52,12 +52,12 @@
 
   function render() {
     const view = document.getElementById("view");
-    if (state.tab === "today")        view.innerHTML = renderToday();
+    if (state.tab === "home")         view.innerHTML = renderHome();
+    else if (state.tab === "today")   view.innerHTML = renderToday();
     else if (state.tab === "work")    view.innerHTML = renderWork();
     else if (state.tab === "history") view.innerHTML = renderHistory();
-    else if (state.tab === "stats")   view.innerHTML = renderStats();
     else                              view.innerHTML = renderSettings();
-    if (state.tab === "today") { updateFastingLive(); paintTimeline(); }
+    if (state.tab === "home") { updateFastingLive(); paintTimeline(); }
     window.scrollTo(0, 0);
   }
 
@@ -369,8 +369,7 @@
      ============================================================ */
   function renderToday() {
     const key = util.todayKey();
-    return fastingCard() + timelineCard()
-      + eventsCard()
+    return eventsCard()
       + dailyCard(key)
       + tasksCard(key, true)
       + workTodayCard()
@@ -472,7 +471,7 @@
   }
 
   function updateFastingLive() {
-    if (state.tab !== "today") return;
+    if (state.tab !== "home") return;
     const now = new Date();
     const st = fasting.getStatus(cfg, now);
     const eating = st.state === "eating";
@@ -756,6 +755,124 @@
         ${row("⭐ Avg day rating", r7 != null ? r7.toFixed(1) : "—", r30 != null ? r30.toFixed(1) : "—")}
         <div class="reflect-row"><span>🍷 Drinking days</span><span class="muted">last 30d: <strong>${drink30}</strong></span></div>
       </div>`;
+  }
+
+  /* ============================================================
+     Home dashboard — at-a-glance charts (offline SVG, no libs)
+     ============================================================ */
+  function chartCard(title, sub, inner, caption) {
+    return `
+      <div class="card">
+        <div class="chart-head"><h2>${title}</h2>${sub ? `<span class="chart-sub muted">${sub}</span>` : ""}</div>
+        ${inner}
+        ${caption ? `<div class="chart-cap muted">${caption}</div>` : ""}
+      </div>`;
+  }
+
+  // Bar chart from [{value, dim?}]. Optional avg line.
+  function barChartSvg(data, opts) {
+    opts = opts || {};
+    const W = 320, H = 110, padT = 8, padB = 6;
+    const n = data.length || 1;
+    const max = Math.max(opts.max || 0, ...data.map(d => d.value), 1);
+    const bw = W / n;
+    const y = v => H - padB - (v / max) * (H - padT - padB);
+    const bars = data.map((d, i) =>
+      `<rect x="${(i * bw + bw * 0.16).toFixed(1)}" y="${y(d.value).toFixed(1)}" width="${(bw * 0.68).toFixed(1)}"
+             height="${Math.max(0, H - padB - y(d.value)).toFixed(1)}" rx="2" fill="var(--accent)" opacity="${d.dim ? 0.4 : 0.9}"></rect>`).join("");
+    const avg = (opts.avg != null && opts.avg > 0)
+      ? `<line x1="0" y1="${y(opts.avg).toFixed(1)}" x2="${W}" y2="${y(opts.avg).toFixed(1)}" stroke="var(--good)" stroke-width="1.5" stroke-dasharray="4 3"></line>` : "";
+    return `<svg viewBox="0 0 ${W} ${H}" class="chart" preserveAspectRatio="none">${avg}${bars}</svg>`;
+  }
+
+  // Line chart from [{value}] oldest→newest. opts.area fills under the line.
+  function lineChartSvg(points, opts) {
+    opts = opts || {};
+    const W = 320, H = 110, padT = 8, padB = 6;
+    const vals = points.map(p => p.value);
+    const min = opts.min != null ? opts.min : Math.min(...vals);
+    const max = Math.max(...vals, min + 1);
+    const range = (max - min) || 1;
+    const step = W / Math.max(1, points.length - 1);
+    const xy = (p, i) => `${(i * step).toFixed(1)},${(H - padB - ((p.value - min) / range) * (H - padT - padB)).toFixed(1)}`;
+    const coords = points.map(xy).join(" ");
+    const area = opts.area ? `<polygon points="0,${H - padB} ${coords} ${W},${H - padB}" fill="var(--accent)" opacity="0.12"></polygon>` : "";
+    return `<svg viewBox="0 0 ${W} ${H}" class="chart" preserveAspectRatio="none">${area}<polyline points="${coords}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"></polyline></svg>`;
+  }
+
+  function sleepChartCard() {
+    const today = util.todayKey();
+    const data = [];
+    for (let i = 13; i >= 0; i--) {
+      const m = tracking.sleepDurationMin(util.addDays(today, -i));
+      data.push({ value: m ? m / 60 : 0, dim: !m });
+    }
+    if (!data.some(d => d.value > 0)) return chartCard("😴 Sleep", "", `<p class="muted" style="margin:0">Log sleep on Today to see your trend.</p>`);
+    const avg = tracking.avgSleepMin(today, 7);
+    return chartCard("😴 Sleep", avg != null ? `7-day avg ${util.humanDuration(avg)}` : "",
+      barChartSvg(data, { avg: avg != null ? avg / 60 : null }), "Last 14 nights · green line = 7-day avg");
+  }
+
+  function stepsChartCard() {
+    if (!(cfg.metrics || []).some(m => m.id === "steps")) return "";
+    const today = util.todayKey();
+    const data = []; let sum = 0, c = 0;
+    for (let i = 13; i >= 0; i--) {
+      const v = tracking.getMetric(util.addDays(today, -i), "steps") || 0;
+      data.push({ value: v, dim: !v });
+      if (i < 7 && v) { sum += v; c++; }
+    }
+    if (!data.some(d => d.value > 0)) return chartCard("👟 Steps", "", `<p class="muted" style="margin:0">Log steps on Today (Metrics) to see your trend.</p>`);
+    const avg = c ? Math.round(sum / c) : null;
+    return chartCard("👟 Steps", avg != null ? `7-day avg ${avg.toLocaleString()}` : "",
+      barChartSvg(data, { avg }), "Last 14 days · green line = 7-day avg");
+  }
+
+  function fastingChartCard() {
+    const today = util.todayKey();
+    const pts = []; let cum = 0;
+    for (let i = 29; i >= 0; i--) {
+      const eat = fasting.dayEatingSegments(cfg, util.addDays(today, -i)).reduce((s, seg) => s + (seg.endMin - seg.startMin), 0);
+      cum += (1440 - eat) / 60;
+      pts.push({ value: cum });
+    }
+    return chartCard("⏱️ Cumulative fasting", `${Math.round(cum)}h over 30 days`,
+      lineChartSvg(pts, { min: 0, area: true }), "Running total of fasting hours (from your schedule)");
+  }
+
+  function walkingChartCard() {
+    const t = cfg.recurring.find(r => /treadmill|walk/i.test(r.name));
+    if (!t) return "";
+    const today = util.todayKey();
+    const data = [];
+    for (let w = 5; w >= 0; w--) {
+      const wkStart = util.addDays(util.weekKeyOf(today, cfg.weekStartDow), -7 * w);
+      let count = 0;
+      for (let d = 0; d < 7; d++) {
+        const k = util.addDays(wkStart, d);
+        if (k <= today && tracking.dayTaskDone(k, t.id)) count++;
+      }
+      data.push({ value: count, dim: w !== 0 && count === 0 });
+    }
+    const thisWeek = data[data.length - 1].value;
+    return chartCard("🚶 Walking", `${thisWeek} this week`,
+      barChartSvg(data, { max: Math.max(4, ...data.map(d => d.value)) }), `${esc(t.name)} · last 6 weeks`);
+  }
+
+  function weightChartCard() {
+    const m = (cfg.metrics || []).find(x => x.id === "weight");
+    if (!m) return "";
+    const series = tracking.metricSeries("weight", 30);
+    const latest = tracking.metricLatest("weight");
+    const sub = latest ? `${latest.value} ${esc(m.unit || "")}` : "";
+    if (series.length < 2) return chartCard("⚖️ Weight", sub, `<p class="muted" style="margin:0">Log weight on 2+ days for a trend.</p>`);
+    return chartCard("⚖️ Weight", sub, lineChartSvg(series.map(p => ({ value: p.value })), {}), "Last 30 days");
+  }
+
+  function renderHome() {
+    return fastingCard() + timelineCard()
+      + sleepChartCard() + stepsChartCard() + fastingChartCard() + walkingChartCard() + weightChartCard()
+      + dailyStatsCard() + taskStatsCard() + reflectionStatsCard();
   }
 
   /* ============================================================
