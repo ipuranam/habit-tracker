@@ -170,6 +170,8 @@ html, body {
 .fasting-bar-fill { height: 100%; width: 0; border-radius: 5px; transition: width 0.4s ease; }
 .fasting-bar-fill.is-eat  { background: var(--good); }
 .fasting-bar-fill.is-fast { background: var(--accent); }
+.fasting-action { width: 100%; padding: 14px; font-size: 1.02rem; font-weight: 600; margin-top: 14px; }
+.fasting-since { font-size: 0.82rem; margin-top: 10px; }
 
 /* ---- Rolling timeline caption ---- */
 .tl-range { font-size: 0.74rem; font-weight: 400; margin-left: 6px; }
@@ -190,6 +192,10 @@ html, body {
 .tl-evt {
   position: absolute; top: 4px; height: 8px;
   background: var(--gcal); opacity: 0.9; border-radius: 3px;
+}
+.tl-fast {
+  position: absolute; top: 0; height: 100%;
+  background: var(--accent); opacity: 0.16; border-radius: 4px;
 }
 .tl-now {
   position: absolute; top: -4px; bottom: -4px; width: 2px;

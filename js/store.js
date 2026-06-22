@@ -134,9 +134,15 @@ HT.store = (function () {
     return keys.sort().reverse();
   }
 
-  /* ---- Fast history ---- */
+  /* ---- Fast history (actual logged fasts) ---- */
   function getFasts() { return read(K_FASTS, []); }
   function saveFasts(list) { write(K_FASTS, list); }
+  // The currently-running fast, { start }, or null.
+  function getActiveFast() { return read("ht.activeFast", null); }
+  function setActiveFast(obj) {
+    if (obj) write("ht.activeFast", obj);
+    else localStorage.removeItem("ht.activeFast");
+  }
 
   /* ---- Work to-dos (live list, not date-bound) ---- */
   function getWorkTodos() { return read(K_WORK, []); }
@@ -144,7 +150,7 @@ HT.store = (function () {
 
   /* ---- Export / import (groundwork for future sync/backup) ---- */
   function exportAll() {
-    const out = { config: getConfig(), fasts: getFasts(), worktodos: getWorkTodos(), days: {} };
+    const out = { config: getConfig(), fasts: getFasts(), activeFast: getActiveFast(), worktodos: getWorkTodos(), days: {} };
     allDayKeys().forEach(k => { out.days[k] = getDay(k); });
     return out;
   }
@@ -157,6 +163,7 @@ HT.store = (function () {
     Object.keys(localStorage).filter(k => k.startsWith("ht.")).forEach(k => localStorage.removeItem(k));
     if (data.config) write(K_CONFIG, data.config);
     if (data.fasts) write(K_FASTS, data.fasts);
+    if (data.activeFast) write("ht.activeFast", data.activeFast);
     if (data.worktodos) write(K_WORK, data.worktodos);
     if (data.days) Object.keys(data.days).forEach(k => write(K_DAY + k, data.days[k]));
   }
@@ -164,7 +171,7 @@ HT.store = (function () {
   return {
     getConfig, saveConfig,
     getDay, saveDay, updateDay, allDayKeys, emptyDay,
-    getFasts, saveFasts,
+    getFasts, saveFasts, getActiveFast, setActiveFast,
     getWorkTodos, saveWorkTodos,
     exportAll, importAll,
   };

@@ -381,16 +381,32 @@
       + noteCard(key);
   }
 
+  function fastGoalHours() { return cfg.fastGoalHours || 16; }
+
+  // The manual start/stop fasting timer (the hero). Tracks ACTUAL fasts.
   function fastingCard() {
+    const af = tracking.activeFast();
+    if (af) {
+      const mins = (Date.now() - af.start) / 60000;
+      return `
+        <div class="card fasting-card" id="fasting-card">
+          <div class="fasting-state"><span class="fasting-dot is-fast"></span><span>Fasting</span></div>
+          <div class="fasting-elapsed" id="fasting-elapsed">${util.humanDuration(mins)} <span class="muted" style="font-size:.55em;font-weight:400">so far</span></div>
+          <div class="fasting-next muted" id="fasting-next"></div>
+          <div class="fasting-bar"><div class="fasting-bar-fill is-fast" id="fasting-bar-fill"></div></div>
+          <button class="btn btn-accent fasting-action" data-action="end-fast">End fast</button>
+          <div class="muted fasting-since">Started ${labelTime(new Date(af.start))} · ${fastGoalHours()}h goal</div>
+        </div>`;
+    }
+    const last = tracking.lastCompletedFast();
+    const lastLine = last
+      ? `Last fast: <strong>${util.humanDuration((last.end - last.start) / 60000)}</strong>`
+      : "No fasts logged yet";
     return `
       <div class="card fasting-card" id="fasting-card">
-        <div class="fasting-state">
-          <span class="fasting-dot" id="fasting-dot"></span>
-          <span id="fasting-label">…</span>
-        </div>
-        <div class="fasting-elapsed" id="fasting-elapsed">—</div>
-        <div class="fasting-next muted" id="fasting-next">—</div>
-        <div class="fasting-bar"><div class="fasting-bar-fill" id="fasting-bar-fill"></div></div>
+        <div class="fasting-state"><span class="fasting-dot"></span><span>Not fasting</span></div>
+        <button class="btn btn-accent fasting-action" data-action="start-fast" style="margin-top:8px">Start fast</button>
+        <div class="muted fasting-since">${lastLine}</div>
       </div>`;
   }
 
@@ -425,6 +441,13 @@
     const clip = (s, e) => ({ s: Math.max(s, winStart), e: Math.min(e, winEnd) });
 
     let html = "";
+
+    // Your live fast (actual) highlighted under everything else.
+    const af = tracking.activeFast();
+    if (af) {
+      const { s, e } = clip(af.start, now);
+      if (e > s) html += `<div class="tl-fast" style="left:${pct(s)}%;width:${pct(e) - pct(s)}%"></div>`;
+    }
 
     // Eating windows (absolute intervals already span across midnight).
     fasting.absoluteIntervals(cfg, util.todayKey()).forEach(iv => {
@@ -473,30 +496,23 @@
   function updateFastingLive() {
     if (state.tab !== "home") return;
     const now = new Date();
-    const st = fasting.getStatus(cfg, now);
-    const eating = st.state === "eating";
-    const label = document.getElementById("fasting-label");
-    if (!label) return;
-    document.getElementById("fasting-dot").className = "fasting-dot " + (eating ? "is-eat" : "is-fast");
-    label.textContent = eating ? "Eating window" : "Fasting";
 
-    const sinceMin = st.sinceTs != null ? (now - st.sinceTs) / 60000 : null;
-    const remainMin = st.nextTs != null ? (st.nextTs - now) / 60000 : null;
-    document.getElementById("fasting-elapsed").innerHTML = sinceMin != null
-      ? `${util.humanDuration(sinceMin)} <span class="muted" style="font-size:.55em;font-weight:400">so far</span>` : "—";
-
-    const next = document.getElementById("fasting-next");
-    if (st.nextTs != null) {
-      const d = new Date(st.nextTs);
-      const at = util.minutesToLabel(d.getHours() * 60 + d.getMinutes());
-      next.textContent = `${eating ? "Fast begins" : "Eating begins"} in ${util.humanDuration(remainMin)} · at ${at}`;
-    } else next.textContent = "";
-
-    const fill = document.getElementById("fasting-bar-fill");
-    if (st.sinceTs != null && st.nextTs != null) {
-      const frac = (now - st.sinceTs) / (st.nextTs - st.sinceTs);
-      fill.style.width = Math.max(0, Math.min(100, frac * 100)) + "%";
-      fill.className = "fasting-bar-fill " + (eating ? "is-eat" : "is-fast");
+    // Live update the manual timer while a fast is running.
+    const af = tracking.activeFast();
+    const elapsedEl = document.getElementById("fasting-elapsed");
+    if (af && elapsedEl) {
+      const mins = (now.getTime() - af.start) / 60000;
+      elapsedEl.innerHTML = `${util.humanDuration(mins)} <span class="muted" style="font-size:.55em;font-weight:400">so far</span>`;
+      const goalMin = fastGoalHours() * 60;
+      const fill = document.getElementById("fasting-bar-fill");
+      if (fill) fill.style.width = Math.max(0, Math.min(100, (mins / goalMin) * 100)) + "%";
+      const next = document.getElementById("fasting-next");
+      if (next) {
+        const remain = goalMin - mins;
+        next.textContent = remain > 0
+          ? `${util.humanDuration(remain)} to your ${fastGoalHours()}h goal`
+          : `🎉 ${fastGoalHours()}h goal reached`;
+      }
     }
 
     // Repaint the rolling timeline once per minute (it shifts slowly with now).
@@ -627,12 +643,12 @@
   }
 
   function fastHistoryCard() {
-    const fasts = fasting.recentFasts(cfg, new Date(), 10);
-    if (!fasts.length) return `<div class="card"><h2>Past fasts</h2><p class="muted">No completed fasts yet.</p></div>`;
+    const fasts = tracking.completedFasts().slice().sort((a, b) => b.end - a.end).slice(0, 12);
+    if (!fasts.length) return `<div class="card"><h2>Past fasts</h2><p class="muted">No fasts logged yet. Use the Start/End fast timer on Home.</p></div>`;
     const rows = fasts.map(f => {
       const s = new Date(f.start), e = new Date(f.end);
       return `<li class="fast-item">
-          <span class="fast-dur">${util.humanDuration(f.durationMin)}</span>
+          <span class="fast-dur">${util.humanDuration((f.end - f.start) / 60000)}</span>
           <span class="muted">${util.MONTH_SHORT[s.getMonth()]} ${s.getDate()}, ${labelTime(s)} → ${labelTime(e)}</span>
         </li>`;
     }).join("");
@@ -830,29 +846,28 @@
 
   function fastingChartCard() {
     const today = util.todayKey();
-    // Count only days you actually marked "Fasted" (real adherence), not the
-    // theoretical schedule — otherwise it would project ~16h onto every past day.
-    const fastedHabit = (cfg.habits || []).find(h => isDailyCheck(h) && (h.id === "fasted" || /fast/i.test(h.name)));
-    if (!fastedHabit) {
-      return chartCard("⏱️ Cumulative fasting", "",
-        `<p class="muted" style="margin:0">Add a “Fasted” daily habit (Settings) to track this.</p>`);
-    }
-    const pts = []; let cum = 0, anyFasted = false;
+    // Sum your ACTUAL logged fasts (by the day each one ended) over 30 days.
+    const winStart = util.keyToDate(util.addDays(today, -29)).getTime();
+    const perDay = {};
+    tracking.completedFasts().forEach(f => {
+      if (f.end >= winStart) {
+        const k = util.dateKey(new Date(f.end));
+        perDay[k] = (perDay[k] || 0) + (f.end - f.start) / 3600000;
+      }
+    });
+    const pts = []; let cum = 0, any = false;
     for (let i = 29; i >= 0; i--) {
       const k = util.addDays(today, -i);
-      if (tracking.dayHabitDone(k, fastedHabit.id)) {
-        const eat = fasting.dayEatingSegments(cfg, k).reduce((s, seg) => s + (seg.endMin - seg.startMin), 0);
-        cum += (1440 - eat) / 60;
-        anyFasted = true;
-      }
+      if (perDay[k]) any = true;
+      cum += (perDay[k] || 0);
       pts.push({ value: cum });
     }
-    if (!anyFasted) {
+    if (!any) {
       return chartCard("⏱️ Cumulative fasting", "0h yet",
-        `<p class="muted" style="margin:0">Mark ✓ Fasted on the days you fast and this builds up.</p>`);
+        `<p class="muted" style="margin:0">Use the Start/End fast timer on Home and this builds up.</p>`);
     }
     return chartCard("⏱️ Cumulative fasting", `${Math.round(cum)}h in last 30 days`,
-      lineChartSvg(pts, { min: 0, area: true }), "Counts only days you marked ✓ Fasted");
+      lineChartSvg(pts, { min: 0, area: true }), "Running total of your actual logged fasts");
   }
 
   function walkingChartCard() {
@@ -1116,6 +1131,13 @@
       case "remove-meal":  tracking.removeMeal(key, Number(el.dataset.at)); render(); break;
       case "set-rating":   tracking.setRating(key, Number(el.dataset.val)); render(); break;
       case "clear-sleep":  tracking.clearSleep(key); render(); break;
+      case "start-fast":   tracking.startFast(); render(); break;
+      case "end-fast": {
+        const f = tracking.stopFast();
+        if (f) flash(`Fast saved · ${util.humanDuration((f.end - f.start) / 60000)}`);
+        render();
+        break;
+      }
       case "remove-work":  tracking.removeWorkTodo(id); render(); break;
 
       case "hist-prev":  state.histDate = util.addDays(state.histDate, -1); state.calAnchor = state.histDate; render(); break;

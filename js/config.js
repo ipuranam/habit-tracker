@@ -19,6 +19,7 @@ window.HT = window.HT || {};
 HT.DEFAULT_CONFIG = {
   version: 5,
   weekStartDow: 1, // Monday — resets weekly drinking count & weekly views
+  fastGoalHours: 16, // target length for the manual start/stop fasting timer
 
   // Optional passcode gate. A PBKDF2 hash (hex) of the passcode, baked into the
   // deployed app so EVERY visitor (incl. strangers on a fresh browser) must enter

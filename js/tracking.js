@@ -148,6 +148,28 @@ HT.tracking = (function () {
     return { count: n, weekStart: wk, days };
   }
 
+  /* ---------- actual fasting timer ---------- */
+  function activeFast() { return store.getActiveFast(); }
+  function startFast() {
+    if (store.getActiveFast()) return;            // already running
+    store.setActiveFast({ start: Date.now() });
+  }
+  function stopFast() {
+    const a = store.getActiveFast();
+    if (!a) return null;
+    const f = { start: a.start, end: Date.now() };
+    const list = store.getFasts();
+    list.push(f);
+    store.saveFasts(list);
+    store.setActiveFast(null);
+    return f;
+  }
+  function completedFasts() { return store.getFasts(); }
+  function lastCompletedFast() {
+    const l = store.getFasts();
+    return l.length ? l[l.length - 1] : null;
+  }
+
   /* ---------- meals ---------- */
   function addMeal(key, meal) {
     return store.updateDay(key, rec => {
@@ -312,6 +334,7 @@ HT.tracking = (function () {
     taskRateLastDays, taskDoneLastDays,
     logDrink, clearDrink, drinkLog, drinkDaysInWeek,
     addMeal, removeMeal,
+    activeFast, startFast, stopFast, completedFasts, lastCompletedFast,
     getSleep, setSleep, clearSleep, sleepDurationMin, avgSleepMin,
     getRating, setRating, avgRating,
     getNote, setNote,
