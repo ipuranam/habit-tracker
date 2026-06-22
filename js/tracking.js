@@ -164,6 +164,10 @@ HT.tracking = (function () {
     store.setActiveFast(null);
     return f;
   }
+  function setFastStart(ts) {
+    const a = store.getActiveFast();
+    if (a) store.setActiveFast({ ...a, start: ts });
+  }
   function completedFasts() { return store.getFasts(); }
   function lastCompletedFast() {
     const l = store.getFasts();
@@ -334,7 +338,7 @@ HT.tracking = (function () {
     taskRateLastDays, taskDoneLastDays,
     logDrink, clearDrink, drinkLog, drinkDaysInWeek,
     addMeal, removeMeal,
-    activeFast, startFast, stopFast, completedFasts, lastCompletedFast,
+    activeFast, startFast, stopFast, setFastStart, completedFasts, lastCompletedFast,
     getSleep, setSleep, clearSleep, sleepDurationMin, avgSleepMin,
     getRating, setRating, avgRating,
     getNote, setNote,

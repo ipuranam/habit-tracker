@@ -383,6 +383,12 @@
 
   function fastGoalHours() { return cfg.fastGoalHours || 16; }
 
+  // Format a timestamp as a LOCAL "YYYY-MM-DDTHH:MM" for <input type=datetime-local>.
+  function toLocalInputValue(ts) {
+    const d = new Date(ts), p = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
   // The manual start/stop fasting timer (the hero). Tracks ACTUAL fasts.
   function fastingCard() {
     const af = tracking.activeFast();
@@ -395,7 +401,12 @@
           <div class="fasting-next muted" id="fasting-next"></div>
           <div class="fasting-bar"><div class="fasting-bar-fill is-fast" id="fasting-bar-fill"></div></div>
           <button class="btn btn-accent fasting-action" data-action="end-fast">End fast</button>
-          <div class="muted fasting-since">Started ${labelTime(new Date(af.start))} · ${fastGoalHours()}h goal</div>
+          <div class="fasting-since">
+            <span class="muted">Started</span>
+            <input type="datetime-local" class="fast-start-input" data-action="edit-fast-start"
+                   value="${toLocalInputValue(af.start)}" max="${toLocalInputValue(Date.now())}">
+          </div>
+          <div class="muted" style="font-size:.74rem;margin-top:4px">Backdate this if you started earlier.</div>
         </div>`;
     }
     const last = tracking.lastCompletedFast();
@@ -1212,6 +1223,15 @@
     }
     if (act === "save-metric") {
       tracking.setMetric(el.dataset.key, el.dataset.id, e.target.value); render(); return;
+    }
+    if (act === "edit-fast-start") {
+      if (!e.target.value) return;
+      let ts = new Date(e.target.value).getTime(); // datetime-local parses as local time
+      if (isNaN(ts)) return;
+      if (ts > Date.now()) { ts = Date.now(); flash("Can't start in the future"); }
+      tracking.setFastStart(ts);
+      render();
+      return;
     }
     if (act === "save-gcal-clientid") {
       cfg.google = cfg.google || {}; cfg.google.clientId = e.target.value.trim(); saveCfg(); return;

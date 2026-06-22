@@ -171,7 +171,8 @@ html, body {
 .fasting-bar-fill.is-eat  { background: var(--good); }
 .fasting-bar-fill.is-fast { background: var(--accent); }
 .fasting-action { width: 100%; padding: 14px; font-size: 1.02rem; font-weight: 600; margin-top: 14px; }
-.fasting-since { font-size: 0.82rem; margin-top: 10px; }
+.fasting-since { font-size: 0.82rem; margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.fast-start-input { font-family: inherit; font-size: 0.85rem; padding: 6px 8px; }
 
 /* ---- Rolling timeline caption ---- */
 .tl-range { font-size: 0.74rem; font-weight: 400; margin-left: 6px; }
