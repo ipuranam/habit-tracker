@@ -86,6 +86,12 @@ HT.store = (function () {
       cfg.version = 5;
       changed = true;
     }
+    // The passcode hash is a DEPLOY-level setting, not user data: always mirror
+    // whatever is baked into the shipped config, so changing it applies to every
+    // install (new and existing) on next load.
+    const wantLock = HT.DEFAULT_CONFIG.lockHash || "";
+    if ((cfg.lockHash || "") !== wantLock) { cfg.lockHash = wantLock; changed = true; }
+
     if (changed) write(K_CONFIG, cfg);
     return cfg;
   }

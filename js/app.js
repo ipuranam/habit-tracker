@@ -895,7 +895,7 @@
      ============================================================ */
   function renderSettings() {
     return dailyHabitsEditor() + recurringEditor() + metricsEditor() + scheduleEditor()
-      + drinkingLimitEditor() + remindersEditor() + googleCalendarEditor() + anchorsEditor() + dataCard();
+      + drinkingLimitEditor() + remindersEditor() + googleCalendarEditor() + privacyEditor() + anchorsEditor() + dataCard();
   }
 
   function metricsEditor() {
@@ -1058,6 +1058,25 @@
         <p class="muted" style="font-size:.8rem">Shown on the Today timeline for context (e.g. your work block).</p></div>`;
   }
 
+  function privacyEditor() {
+    const locked = !!cfg.lockHash;
+    return `
+      <div class="card">
+        <h2>Privacy / passcode</h2>
+        <p class="muted" style="font-size:.84rem;margin-top:0">${locked
+          ? "A passcode is required to open this app."
+          : "No passcode set. Generate a hash below and send it to me to turn the lock on."}</p>
+        <label class="muted" style="font-size:.8rem">Choose a passphrase</label>
+        <div class="form-line" style="margin-top:4px;gap:8px">
+          <input type="text" id="lock-gen-input" placeholder="e.g. a few words you'll remember" style="flex:1" autocomplete="off">
+          <button class="btn" data-action="lock-generate" type="button">Generate</button>
+        </div>
+        <div id="lock-gen-out" class="lock-gen-out muted"></div>
+        ${locked ? `<div class="form-actions" style="margin-top:12px"><button class="btn" data-action="lock-now">Lock now (this device)</button></div>` : ""}
+        <p class="muted" style="font-size:.76rem;margin-bottom:0">Deterrent, not strong security: the hash ships in the app’s public code, so use a real passphrase (not a 4-digit PIN). Your data is already private to your devices regardless.</p>
+      </div>`;
+  }
+
   function dataCard() {
     return `
       <div class="card">
@@ -1119,6 +1138,9 @@
       case "save-schedule": saveSchedule(); break;
       case "export": exportData(); break;
       case "reset":  resetAll(); break;
+
+      case "lock-generate": generateLockHash(); break;
+      case "lock-now": localStorage.removeItem("ht.unlock"); location.reload(); break;
 
       case "delete-metric":
         if (confirm("Delete this metric? Its logged values stay in storage but it stops appearing.")) {
@@ -1343,6 +1365,19 @@
     });
   }
 
+  function generateLockHash() {
+    const input = document.getElementById("lock-gen-input");
+    const out = document.getElementById("lock-gen-out");
+    const pass = (input && input.value || "").trim();
+    if (!pass) { if (out) out.textContent = "Type a passphrase first."; return; }
+    if (pass.length < 6 && out) out.innerHTML = `<span style="color:var(--warn)">Tip: longer is much safer.</span> `;
+    hashPasscode(pass).then(h => {
+      out.innerHTML = `Send me this line to turn on the lock:
+        <code class="lock-hash">lockHash: "${h}"</code>
+        <span style="font-size:.74rem">Then everyone (including you, once per new device) must enter “${esc(pass)}” to open the app.</span>`;
+    });
+  }
+
   function resetAll() {
     if (!confirm("This erases ALL tracked data and settings in this browser. Continue?")) return;
     Object.keys(localStorage).filter(k => k.startsWith("ht.")).forEach(k => localStorage.removeItem(k));
@@ -1361,7 +1396,7 @@
   /* ============================================================
      Boot
      ============================================================ */
-  function boot() {
+  function startApp() {
     cfg = store.getConfig();
     document.getElementById("header-date").textContent = util.prettyDate(util.todayKey());
     const view = document.getElementById("view");
@@ -1376,6 +1411,55 @@
     checkReminders();
     setInterval(checkReminders, 60000); // re-check timed tasks each minute while open
     gcalRefresh(); // refresh calendar events if already connected this session
+  }
+
+  // Derive a PBKDF2-SHA256 hex hash of a passcode (slows brute-force; fixed app
+  // salt). Used by both the lock screen and the Settings hash generator.
+  async function hashPasscode(pass) {
+    const enc = new TextEncoder();
+    const km = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", salt: enc.encode("habit-tracker-lock-v1"), iterations: 150000, hash: "SHA-256" }, km, 256);
+    return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  // Full-screen lock overlay shown before the app boots when a passcode is set.
+  function showLockScreen(expectedHash, onUnlock) {
+    const ov = document.createElement("div");
+    ov.className = "lockscreen";
+    ov.innerHTML = `
+      <form class="lockbox" id="lockform">
+        <div class="lock-emoji">🔒</div>
+        <div class="lock-title">Enter passcode</div>
+        <input type="password" id="lock-input" placeholder="Passcode" autocomplete="current-password" autofocus>
+        <button class="btn btn-accent" type="submit">Unlock</button>
+        <div class="lock-err" id="lock-err"></div>
+      </form>`;
+    document.body.appendChild(ov);
+    const input = ov.querySelector("#lock-input");
+    const err = ov.querySelector("#lock-err");
+    ov.querySelector("#lockform").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const h = await hashPasscode(input.value);
+      if (h === expectedHash) {
+        localStorage.setItem("ht.unlock", expectedHash); // stays unlocked on this device
+        ov.remove();
+        onUnlock();
+      } else {
+        err.textContent = "Wrong passcode";
+        input.value = ""; input.focus();
+      }
+    });
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function boot() {
+    const c = store.getConfig();
+    if (c.lockHash && localStorage.getItem("ht.unlock") !== c.lockHash) {
+      showLockScreen(c.lockHash, startApp);
+    } else {
+      startApp();
+    }
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

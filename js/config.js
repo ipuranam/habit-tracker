@@ -19,6 +19,12 @@ window.HT = window.HT || {};
 HT.DEFAULT_CONFIG = {
   version: 5,
   weekStartDow: 1, // Monday — resets weekly drinking count & weekly views
+
+  // Optional passcode gate. A PBKDF2 hash (hex) of the passcode, baked into the
+  // deployed app so EVERY visitor (incl. strangers on a fresh browser) must enter
+  // it before the app shows. Empty = no gate. Set via Settings → Privacy (generate
+  // the hash) and deploy it here. Deterrent only — see the note in Settings.
+  lockHash: "",
   remindersEnabled: false, // in-app reminders while the app is open (see note in Settings)
 
   // Google Calendar (optional, online-only). clientId comes from your own
