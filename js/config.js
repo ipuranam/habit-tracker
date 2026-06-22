@@ -24,7 +24,7 @@ HT.DEFAULT_CONFIG = {
   // deployed app so EVERY visitor (incl. strangers on a fresh browser) must enter
   // it before the app shows. Empty = no gate. Set via Settings → Privacy (generate
   // the hash) and deploy it here. Deterrent only — see the note in Settings.
-  lockHash: "",
+  lockHash: "83f81e7c7a0a0e609cb4c93fb5f504a13376f8f91d74f85253ae70de5f23e559",
   remindersEnabled: false, // in-app reminders while the app is open (see note in Settings)
 
   // Google Calendar (optional, online-only). clientId comes from your own
