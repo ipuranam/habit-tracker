@@ -32,6 +32,10 @@ HT.DEFAULT_CONFIG = {
   // Google Cloud OAuth setup; calendar data is fetched browser↔Google directly.
   google: { clientId: "", calendarId: "primary" },
 
+  // Cross-device sync via your private Google Drive app folder (reuses the
+  // Google sign-in). Off by default; enable in Settings → Sync.
+  syncEnabled: false,
+
   // Eating windows per weekday. Each day is a list of {start,end} windows
   // (a list so a day could have more than one window later). Anything
   // outside these windows is a fasting window.

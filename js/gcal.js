@@ -15,7 +15,8 @@
 window.HT = window.HT || {};
 
 HT.gcal = (function () {
-  const SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly";
+  // calendar (read events) + drive.appdata (private per-app sync folder)
+  const SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly https://www.googleapis.com/auth/drive.appdata";
   const TOKEN_KEY = "ht.gcal.token";
   const CACHE_PREFIX = "ht.gcal.cache.";
 
@@ -46,10 +47,11 @@ HT.gcal = (function () {
     });
   }
 
-  async function connect() {
+  async function connect(opts) {
     const g = gconf();
     if (!g.clientId) throw new Error("Add your Google OAuth Client ID in Settings first.");
     await loadGis();
+    const silent = !!(opts && opts.silent);
     return new Promise((resolve, reject) => {
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: g.clientId,
@@ -59,12 +61,20 @@ HT.gcal = (function () {
           accessToken = resp.access_token;
           tokenExpiry = Date.now() + ((resp.expires_in ? resp.expires_in * 1000 : 3600000) - 60000);
           try { sessionStorage.setItem(TOKEN_KEY, JSON.stringify({ accessToken, tokenExpiry })); } catch (e) {}
-          resolve();
+          resolve(accessToken);
         },
+        error_callback: (err) => reject(new Error((err && err.type) || "auth_failed")),
       });
-      // Empty prompt = silent if the Google session already consented.
-      tokenClient.requestAccessToken({ prompt: accessToken ? "" : "consent" });
+      // Empty prompt = silent (no popup) if the Google session already consented.
+      tokenClient.requestAccessToken({ prompt: silent ? "" : (accessToken ? "" : "consent") });
     });
+  }
+
+  function getAccessToken() { return isConnected() ? accessToken : null; }
+  // Return a valid token, connecting if needed. silent=true never shows a popup.
+  async function ensureToken(silent) {
+    if (isConnected()) return accessToken;
+    return connect({ silent });
   }
 
   function disconnect() {
@@ -107,5 +117,5 @@ HT.gcal = (function () {
     return events;
   }
 
-  return { isConfigured, isConnected, connect, disconnect, fetchEvents, cachedEvents };
+  return { isConfigured, isConnected, connect, disconnect, fetchEvents, cachedEvents, getAccessToken, ensureToken };
 })();

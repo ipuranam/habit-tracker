@@ -352,6 +352,48 @@
       </div>`;
   }
 
+  function timeAgo(ts) {
+    if (!ts) return "";
+    const s = (Date.now() - ts) / 1000;
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.floor(s / 60) + "m ago";
+    if (s < 86400) return Math.floor(s / 3600) + "h ago";
+    return Math.floor(s / 86400) + "d ago";
+  }
+
+  function syncEditor() {
+    const g = cfg.google || {};
+    const on = !!cfg.syncEnabled;
+    const synced = HT.sync.lastSynced();
+    let status;
+    if (!g.clientId) status = "Connect Google Calendar first — sync reuses the same Google sign-in.";
+    else if (on) status = synced ? `On · last synced ${timeAgo(synced)}` : "On.";
+    else status = "Off. Turn on to sync this device with your other devices via your private Google Drive folder.";
+    const btns = !g.clientId ? "" : (on
+      ? `<div class="form-actions"><button class="btn btn-accent" data-action="sync-now">Sync now</button><button class="btn" data-action="sync-off">Turn off</button></div>`
+      : `<button class="btn btn-accent" data-action="sync-enable">Enable Drive sync</button>`);
+    return `
+      <div class="card">
+        <h2>Sync (Google Drive)</h2>
+        <p class="muted" style="font-size:.84rem;margin-top:0">${status}</p>
+        ${btns}
+        <p class="muted" style="font-size:.76rem;margin-bottom:0">Stored in a private per-app Drive folder (hidden from your normal Drive). Online-only; last save wins, so avoid editing two devices at the exact same time.</p>
+      </div>`;
+  }
+
+  function enableSync() {
+    HT.gcal.connect()
+      .then(() => { cfg.syncEnabled = true; saveCfg(); return HT.sync.push(false); })
+      .then(() => { flash("Sync on"); render(); })
+      .catch(e => { alert("Couldn't enable sync: " + e.message); render(); });
+  }
+  function doSyncNow() {
+    flash("Syncing…");
+    HT.sync.syncNow(false)
+      .then(p => { cfg = store.getConfig(); flash(p.pulled ? "Pulled latest" : "Synced"); render(); })
+      .catch(e => alert("Sync failed: " + e.message));
+  }
+
   function gcalConnect() {
     HT.gcal.connect()
       .then(() => { flash("Connected"); gcalRefresh(); render(); })
@@ -945,7 +987,7 @@
      ============================================================ */
   function renderSettings() {
     return dailyHabitsEditor() + recurringEditor() + metricsEditor() + scheduleEditor()
-      + drinkingLimitEditor() + remindersEditor() + googleCalendarEditor() + privacyEditor() + anchorsEditor() + dataCard();
+      + drinkingLimitEditor() + remindersEditor() + googleCalendarEditor() + syncEditor() + privacyEditor() + anchorsEditor() + dataCard();
   }
 
   function metricsEditor() {
@@ -1219,6 +1261,9 @@
 
       case "gcal-connect":    gcalConnect(); break;
       case "gcal-disconnect": HT.gcal.disconnect(); render(); break;
+      case "sync-enable": enableSync(); break;
+      case "sync-now":    doSyncNow(); break;
+      case "sync-off":    cfg.syncEnabled = false; saveCfg(); render(); break;
       case "event-to-work":   tracking.addWorkTodo("day", el.dataset.title, { evtId: el.dataset.evtid }); flash("Added to Work"); render(); break;
       case "import-events": {
         const n = tracking.importCalendarEvents(HT.gcal.cachedEvents(util.todayKey()) || []);
@@ -1431,6 +1476,7 @@
         state.histDate = util.todayKey();
         rerender();
         flash("Backup imported");
+        if (cfg.syncEnabled) HT.sync.push(true).catch(() => {});
       } catch (e) { alert("Import failed: " + e.message); }
     };
     reader.readAsText(file);
@@ -1504,6 +1550,20 @@
     checkReminders();
     setInterval(checkReminders, 60000); // re-check timed tasks each minute while open
     gcalRefresh(); // refresh calendar events if already connected this session
+
+    // Auto-push (debounced) whenever data changes, if sync is on.
+    let pushTimer = null;
+    store.onChange(() => {
+      if (!cfg.syncEnabled) return;
+      clearTimeout(pushTimer);
+      pushTimer = setTimeout(() => HT.sync.push(true).catch(() => {}), 3000);
+    });
+    // Auto-pull on open (silent — no popup); adopt + re-render if newer.
+    if (cfg.syncEnabled) {
+      HT.sync.pull(true).then(p => {
+        if (p.pulled) { cfg = store.getConfig(); render(); flash("Synced from another device"); }
+      }).catch(() => {});
+    }
   }
 
   // Derive a PBKDF2-SHA256 hex hash of a passcode (slows brute-force; fixed app

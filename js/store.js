@@ -17,6 +17,15 @@ HT.store = (function () {
   const K_DAY    = "ht.day.";     // + dateKey
   const K_FASTS  = "ht.fasts";
   const K_WORK   = "ht.worktodos"; // ad-hoc work to-do list (day/week scoped)
+  const K_LASTMOD = "ht.lastModified";
+
+  // Keys whose changes count as "data" worth syncing (excludes caches, the
+  // unlock token, the lastModified stamp itself, etc.).
+  const SYNC_PREFIXES = [K_CONFIG, K_DAY, K_FASTS, "ht.activeFast", K_WORK];
+  function isSyncable(key) { return SYNC_PREFIXES.some(p => key === p || key.startsWith(p)); }
+
+  let changeCb = null;     // notified after a syncable change (for auto-push)
+  let suppress = false;    // pause change tracking during bulk import
 
   function read(key, fallback) {
     try {
@@ -33,7 +42,15 @@ HT.store = (function () {
     } catch (e) {
       console.error("store.write failed for", key, e);
     }
+    if (!suppress && isSyncable(key)) {
+      try { localStorage.setItem(K_LASTMOD, JSON.stringify(Date.now())); } catch (e) {}
+      if (changeCb) changeCb();
+    }
   }
+
+  function getLastModified() { return read(K_LASTMOD, 0); }
+  function setLastModified(ts) { try { localStorage.setItem(K_LASTMOD, JSON.stringify(ts)); } catch (e) {} }
+  function onChange(cb) { changeCb = cb; }
 
   /* ---- Config ---- */
   function getConfig() {
@@ -160,12 +177,21 @@ HT.store = (function () {
     if (!data || typeof data !== "object" || (!data.config && !data.days)) {
       throw new Error("This doesn't look like a tracker backup file.");
     }
-    Object.keys(localStorage).filter(k => k.startsWith("ht.")).forEach(k => localStorage.removeItem(k));
-    if (data.config) write(K_CONFIG, data.config);
-    if (data.fasts) write(K_FASTS, data.fasts);
-    if (data.activeFast) write("ht.activeFast", data.activeFast);
-    if (data.worktodos) write(K_WORK, data.worktodos);
-    if (data.days) Object.keys(data.days).forEach(k => write(K_DAY + k, data.days[k]));
+    suppress = true;
+    try {
+      const unlock = localStorage.getItem("ht.unlock"); // keep the device unlocked across an import
+      Object.keys(localStorage).filter(k => k.startsWith("ht.")).forEach(k => localStorage.removeItem(k));
+      if (unlock) localStorage.setItem("ht.unlock", unlock);
+      if (data.config) write(K_CONFIG, data.config);
+      if (data.fasts) write(K_FASTS, data.fasts);
+      if (data.activeFast) write("ht.activeFast", data.activeFast);
+      if (data.worktodos) write(K_WORK, data.worktodos);
+      if (data.days) Object.keys(data.days).forEach(k => write(K_DAY + k, data.days[k]));
+    } finally {
+      suppress = false;
+    }
+    // Sync imports carry the source timestamp; a manual file import is "now".
+    setLastModified((data.meta && data.meta.lastModified) || Date.now());
   }
 
   return {
@@ -174,5 +200,6 @@ HT.store = (function () {
     getFasts, saveFasts, getActiveFast, setActiveFast,
     getWorkTodos, saveWorkTodos,
     exportAll, importAll,
+    getLastModified, setLastModified, onChange,
   };
 })();
